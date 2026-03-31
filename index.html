@@ -505,7 +505,96 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   </div>
 
   <div class="sh"><h2>廣告素材成效</h2><div class="shline"></div></div>
-  <div class="g2">
+
+  <!-- 素材子分頁 -->
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="shtab on" id="adtab-meta" onclick="adCreativeTab('meta',this)">📘 Meta 素材</button>
+    <button class="shtab" id="adtab-google" onclick="adCreativeTab('google',this)">🟡 Google 素材</button>
+  </div>
+
+  <!-- META 素材面板 -->
+  <div id="adp-meta">
+    <div class="ib blue" style="margin-bottom:10px"><span>💡</span><div>
+      <strong>Attribution：7d_click</strong> ·
+      轉換率 = 購買數 / 不重複點擊數 ·
+      依花費排序，花費 &lt; NT$500 已過濾
+    </div></div>
+    <div class="card" style="padding:0">
+      <div class="tw" style="max-height:520px;overflow-y:auto">
+        <table id="tMetaCreative">
+          <thead>
+            <tr>
+              <th class="tl" style="min-width:160px">素材名稱</th>
+              <th>花費</th>
+              <th>觸及</th>
+              <th>CPM</th>
+              <th title="不重複 CTR">不重複CTR</th>
+              <th title="不重複 CPC">不重複CPC</th>
+              <th colspan="4" style="text-align:center;border-left:1px solid var(--bdr);color:var(--grn)">── 購買 ──</th>
+              <th colspan="4" style="text-align:center;border-left:1px solid var(--bdr);color:var(--cyan)">── 加入購物車 ──</th>
+              <th style="border-left:1px solid var(--bdr)">ROAS</th>
+            </tr>
+            <tr style="font-size:9px;color:var(--t4)">
+              <th class="tl"></th>
+              <th></th><th></th><th></th><th></th><th></th>
+              <th style="border-left:1px solid var(--bdr)">次數</th>
+              <th>轉換值</th>
+              <th>每次成本</th>
+              <th>轉換率</th>
+              <th style="border-left:1px solid var(--bdr)">次數</th>
+              <th>轉換值</th>
+              <th>每次成本</th>
+              <th>轉換率</th>
+              <th style="border-left:1px solid var(--bdr)"></th>
+            </tr>
+          </thead>
+          <tbody id="tMetaCreativeBody">
+            <tr><td colspan="15" style="text-align:center;padding:20px;color:var(--t3)">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google 素材面板 -->
+  <div id="adp-google" style="display:none">
+    <div class="ib blue" style="margin-bottom:10px"><span>💡</span><div>
+      <strong>Google Ads 廣告層級</strong> ·
+      轉換率 = 轉換數 / 點擊數 ·
+      PMax 廣告名稱為 null（由系統自動組合）
+    </div></div>
+    <div class="card" style="padding:0">
+      <div class="tw" style="max-height:520px;overflow-y:auto">
+        <table id="tGoogleCreative">
+          <thead>
+            <tr>
+              <th class="tl" style="min-width:160px">廣告名稱</th>
+              <th class="tl">活動</th>
+              <th>花費</th>
+              <th>曝光</th>
+              <th>CPM</th>
+              <th>CTR</th>
+              <th colspan="3" style="text-align:center;border-left:1px solid var(--bdr);color:var(--grn)">── 購買轉換 ──</th>
+              <th style="border-left:1px solid var(--bdr)">ROAS</th>
+            </tr>
+            <tr style="font-size:9px;color:var(--t4)">
+              <th class="tl"></th><th class="tl"></th>
+              <th></th><th></th><th></th><th></th>
+              <th style="border-left:1px solid var(--bdr)">次數</th>
+              <th>轉換值</th>
+              <th>每次成本</th>
+              <th style="border-left:1px solid var(--bdr)"></th>
+            </tr>
+          </thead>
+          <tbody id="tGoogleCreativeBody">
+            <tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="g2" style="margin-top:12px">
     <div class="card"><div class="ct" style="color:var(--grn)">🟢 高效素材</div><div class="src-list" id="adBest"></div></div>
     <div class="card"><div class="ct" style="color:var(--red)">🔴 低效素材</div><div class="src-list" id="adWorst"></div></div>
   </div>
@@ -1103,6 +1192,10 @@ function drawGA4(){
 
 
 function drawAds(){
+  // 更新 DR_CACHE 供素材分析用
+  const d=dr(); DR_CACHE={from:d.from,to:d.to};
+  CREATIVE_LOADED=false;
+  META_CREATIVE=[]; GOOGLE_CREATIVE=[];
   const tp=getTPDays();
   const{days,mode}=tp;
   document.getElementById('badge-ads').textContent=mode==='30d'?`近30天`:mode==='mom'?'MoM':mode==='week'?'週對比':mode==='yoy'?'YoY':'單日';
@@ -1134,6 +1227,8 @@ function drawAds(){
     {label:'FB ROAS(7d)',data:DK.map(d=>(FB3[d]?.roas)||null),borderColor:'#4b8eff',backgroundColor:'rgba(75,142,255,.08)',fill:true,tension:.3,pointRadius:2,borderWidth:2},
     {label:'Google ROAS',data:DK.map(d=>(GAADS[d]?.roas)||null),borderColor:'#f0a020',backgroundColor:'rgba(240,160,32,.08)',fill:true,tension:.3,pointRadius:2,borderWidth:2},
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+  // 載入素材資料（背景執行）
+  loadCreativeData();
 }
 
 // ─── 優化建議 ───
@@ -2112,6 +2207,190 @@ function drawShopify(){
     shTab('order', document.getElementById('shtab-order'));
   }
 }
+
+
+// ═══ AD CREATIVE ANALYSIS ═══
+let META_CREATIVE = [];
+let GOOGLE_CREATIVE = [];
+let CREATIVE_LOADED = false;
+
+function adCreativeTab(id, btn) {
+  document.querySelectorAll('[id^="adtab-"]').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('[id^="adp-"]').forEach(p => p.style.display = 'none');
+  btn.classList.add('on');
+  document.getElementById('adp-' + id).style.display = 'block';
+  if (!CREATIVE_LOADED) loadCreativeData();
+}
+
+async function loadCreativeData() {
+  if (CREATIVE_LOADED) return;
+  const dr_obj = DR_CACHE || { from: '2026-03-01', to: '2026-03-30' };
+  try {
+    const [metaRaw, gaRaw] = await Promise.all([
+      wFetch('facebook', [
+        'ad_name','ad_id','campaign_name','adset_name',
+        'spend','impressions','reach','cpm',
+        'unique_clicks','unique_ctr','cost_per_unique_click',
+        'actions_omni_purchase','action_values_omni_purchase','cost_per_action_type_omni_purchase',
+        'actions_omni_add_to_cart','action_values_omni_add_to_cart','cost_per_action_type_omni_add_to_cart'
+      ], {
+        accounts: ACC.fb,
+        date_from: dr_obj.from, date_to: dr_obj.to,
+        options: '{"attribution_window":"7d_click"}',
+        filters: '[["spend","gt",500]]'
+      }),
+      wFetch('google_ads', [
+        'ad_name','ad_id','campaign_name','ad_group_name',
+        'cost','impressions','clicks','ctr','average_cpm',
+        'conversions','conversions_value','cost_per_conversion'
+      ], {
+        accounts: ACC.gads,
+        date_from: dr_obj.from, date_to: dr_obj.to,
+        filters: '[["cost","gt",300]]'
+      })
+    ]);
+
+    // Aggregate Meta by ad_id (same ad可能在多個 adset)
+    const metaByAd = {};
+    metaRaw.forEach(r => {
+      const k = r.ad_id || r.ad_name || '?';
+      if (!metaByAd[k]) metaByAd[k] = {
+        name: r.ad_name || '(未命名)',
+        camp: r.campaign_name || '',
+        adset: r.adset_name || '',
+        sp: 0, imp: 0, reach: 0, ucl: 0,
+        pur: 0, purV: 0, atc: 0, atcV: 0
+      };
+      const m = metaByAd[k];
+      m.sp   += +r.spend || 0;
+      m.imp  += +r.impressions || 0;
+      m.reach+= +r.reach || 0;
+      m.ucl  += +r.unique_clicks || 0;
+      m.pur  += +r.actions_omni_purchase || 0;
+      m.purV += +r.action_values_omni_purchase || 0;
+      m.atc  += +r.actions_omni_add_to_cart || 0;
+      m.atcV += +r.action_values_omni_add_to_cart || 0;
+    });
+
+    META_CREATIVE = Object.values(metaByAd).map(m => ({
+      ...m,
+      cpm:    m.imp  ? m.sp / m.imp * 1000 : 0,
+      uctr:   m.reach? m.ucl / m.reach : 0,
+      ucpc:   m.ucl  ? m.sp / m.ucl : 0,
+      purCpa: m.pur  ? m.sp / m.pur : null,
+      purCvr: m.ucl  ? m.pur / m.ucl : 0,
+      atcCpa: m.atc  ? m.sp / m.atc : null,
+      atcCvr: m.ucl  ? m.atc / m.ucl : 0,
+      roas:   m.sp   ? m.purV / m.sp : 0
+    })).sort((a, b) => b.sp - a.sp);
+
+    // Google: aggregate by ad_id+campaign
+    const gaByAd = {};
+    gaRaw.forEach(r => {
+      const k = (r.ad_id || 'pmax') + '||' + (r.campaign_name || '');
+      if (!gaByAd[k]) gaByAd[k] = {
+        name: r.ad_name || '(PMax 自動)',
+        camp: r.campaign_name || '',
+        sp: 0, imp: 0, cl: 0,
+        conv: 0, convV: 0
+      };
+      const g = gaByAd[k];
+      g.sp   += +r.cost || 0;
+      g.imp  += +r.impressions || 0;
+      g.cl   += +r.clicks || 0;
+      g.conv += +r.conversions || 0;
+      g.convV+= +r.conversions_value || 0;
+    });
+
+    GOOGLE_CREATIVE = Object.values(gaByAd).map(g => ({
+      ...g,
+      cpm:    g.imp ? g.sp / g.imp * 1000 : 0,
+      ctr:    g.cl  ? g.cl / g.imp : 0,
+      cpa:    g.conv? g.sp / g.conv : null,
+      cvr:    g.cl  ? g.conv / g.cl : 0,
+      roas:   g.sp  ? g.convV / g.sp : 0
+    })).sort((a, b) => b.sp - a.sp);
+
+    CREATIVE_LOADED = true;
+    renderMetaCreative();
+    renderGoogleCreative();
+  } catch(e) {
+    document.getElementById('tMetaCreativeBody').innerHTML =
+      `<tr><td colspan="15" style="color:var(--red);padding:16px">⚠️ 載入失敗：${e.message}</td></tr>`;
+    document.getElementById('tGoogleCreativeBody').innerHTML =
+      `<tr><td colspan="10" style="color:var(--red);padding:16px">⚠️ 載入失敗：${e.message}</td></tr>`;
+  }
+}
+
+function renderMetaCreative() {
+  const data = META_CREATIVE;
+  if (!data.length) return;
+  const maxSp = Math.max(...data.map(d => d.sp));
+  const body = data.map(r => {
+    const spPct = maxSp ? r.sp / maxSp * 100 : 0;
+    const roasClr = r.roas >= 3.5 ? 'var(--grn)' : r.roas >= 2 ? 'var(--amb)' : 'var(--red)';
+    const uctrPct = (r.uctr * 100).toFixed(2);
+    const purCvr  = (r.purCvr * 100).toFixed(2);
+    const atcCvr  = (r.atcCvr * 100).toFixed(2);
+    return `<tr>
+      <td class="tl" style="max-width:180px">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.name}">${r.name}</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.camp}</div>
+        <div style="height:2px;background:rgba(75,142,255,.15);border-radius:1px;margin-top:3px">
+          <div style="height:2px;width:${spPct}%;background:var(--blue);border-radius:1px"></div>
+        </div>
+      </td>
+      <td class="mn">${fmt(r.sp)}</td>
+      <td class="mn">${r.reach.toLocaleString()}</td>
+      <td class="mn">${fmt(r.cpm)}</td>
+      <td class="mn"><span class="pill ${+uctrPct>=2?'pg':+uctrPct>=1?'py':'pr'}">${uctrPct}%</span></td>
+      <td class="mn">${fmt(r.ucpc)}</td>
+      <td class="mn" style="border-left:1px solid var(--bdr)">${Math.round(r.pur)||0}</td>
+      <td class="mn">${fmt(r.purV)}</td>
+      <td class="mn">${r.purCpa != null ? fmt(r.purCpa) : '<span style="color:var(--t4)">—</span>'}</td>
+      <td class="mn"><span class="pill ${+purCvr>=1?'pg':+purCvr>=0.3?'py':'pr'}">${purCvr}%</span></td>
+      <td class="mn" style="border-left:1px solid var(--bdr)">${Math.round(r.atc)||0}</td>
+      <td class="mn">${fmt(r.atcV)}</td>
+      <td class="mn">${r.atcCpa != null ? fmt(r.atcCpa) : '<span style="color:var(--t4)">—</span>'}</td>
+      <td class="mn"><span class="pill ${+atcCvr>=5?'pg':+atcCvr>=2?'py':'pr'}">${atcCvr}%</span></td>
+      <td class="mn" style="border-left:1px solid var(--bdr);color:${roasClr};font-weight:700">${r.roas.toFixed(2)}x</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tMetaCreativeBody').innerHTML = body || '<tr><td colspan="15" style="color:var(--t3);padding:16px">無資料</td></tr>';
+}
+
+function renderGoogleCreative() {
+  const data = GOOGLE_CREATIVE;
+  if (!data.length) return;
+  const maxSp = Math.max(...data.map(d => d.sp));
+  const body = data.map(r => {
+    const spPct = maxSp ? r.sp / maxSp * 100 : 0;
+    const roasClr = r.roas >= 4 ? 'var(--grn)' : r.roas >= 2 ? 'var(--amb)' : 'var(--red)';
+    const ctrPct  = (r.ctr * 100).toFixed(2);
+    const cvrPct  = (r.cvr * 100).toFixed(2);
+    return `<tr>
+      <td class="tl" style="max-width:200px">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.name}">${r.name}</div>
+        <div style="height:2px;background:rgba(240,160,32,.15);border-radius:1px;margin-top:3px">
+          <div style="height:2px;width:${spPct}%;background:var(--amb);border-radius:1px"></div>
+        </div>
+      </td>
+      <td class="tl" style="font-size:10px;color:var(--t3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.camp}</td>
+      <td class="mn">${fmt(r.sp)}</td>
+      <td class="mn">${r.imp.toLocaleString()}</td>
+      <td class="mn">${fmt(r.cpm)}</td>
+      <td class="mn"><span class="pill ${+ctrPct>=5?'pg':+ctrPct>=1?'py':'pr'}">${ctrPct}%</span></td>
+      <td class="mn" style="border-left:1px solid var(--bdr)">${r.conv.toFixed(1)}</td>
+      <td class="mn">${fmt(r.convV)}</td>
+      <td class="mn">${r.cpa != null ? fmt(r.cpa) : '<span style="color:var(--t4)">—</span>'}</td>
+      <td class="mn" style="border-left:1px solid var(--bdr);color:${roasClr};font-weight:700">${r.roas.toFixed(2)}x</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tGoogleCreativeBody').innerHTML = body || '<tr><td colspan="10" style="color:var(--t3);padding:16px">無資料</td></tr>';
+}
+
+// DR_CACHE 供 loadCreativeData 使用
+let DR_CACHE = null;
 
 </script>
 </body>
