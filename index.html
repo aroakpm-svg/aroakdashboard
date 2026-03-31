@@ -799,59 +799,57 @@ async function loadAllData() {
   DATA_READY = false;
   document.getElementById('tb-period').textContent = '資料載入中...';
 
-  // Date ranges — mar_to 動態取今天
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0,10);
-  const mar_from = '2026-03-01';
-  const mar_to   = todayStr; // 不硬編碼，每次都拉最新
+  const todayStr = new Date().toISOString().slice(0,10);
+  const mar_from = '2026-03-01', mar_to = todayStr;
   const feb_from = '2026-02-01', feb_to = '2026-02-28';
   const q4_from  = '2025-10-01', q4_to  = '2025-12-31';
   const y25_from = '2025-03-01', y25_to = '2025-03-31';
 
+  // 輔助：安全取值（失敗回傳空陣列）
+  const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('wFetch failed:', e.message); return []; } };
+
   try {
-    const [shMar, shFeb, shQ4, sh25,
-           ga4Mar,
-           fbMar, fbCamp,
-           gadsMar, gadsCamp,
-           storeMar, ga4Src,
-           lineItems] = await Promise.all([
-      // Shopify
-      wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to}),
-      wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:feb_from,date_to:feb_to}),
-      wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:q4_from,date_to:q4_to}),
-      wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:y25_from,date_to:y25_to}),
-      // GA4
-      wFetch('googleanalytics4',['date','sessions','add_to_carts','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to}),
-      // Facebook — options 傳 object，wFetch 內部會 JSON.stringify
-      wFetch('facebook',['date','spend','purchase_roas'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}}),
-      wFetch('facebook',['campaign_name','spend','purchase_roas','actions'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}}),
-      // Google Ads
-      wFetch('google_ads',['date','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to}),
-      wFetch('google_ads',['campaign_name','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to}),
-      // Store
-      wFetch('shopify',['date','order_retail_location_name','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['order_retail_location_name','notnull',null]]}),
-      // GA4 Source/Medium
-      wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to}),
-      // Shopify 商品排行（line item level）
-      wFetch('shopify',['date','line_item__title','line_item__quantity','line_item__price'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['line_item__quantity','gt',0]]}),
+    // ── 第一批：核心數據（主要分析用）──
+    const [shMar, ga4Mar, fbMar, gadsMar] = await Promise.all([
+      safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to})),
+      safe(() => wFetch('googleanalytics4',['date','sessions','add_to_carts','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to})),
+      safe(() => wFetch('facebook',['date','spend','purchase_roas'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}})),
+      safe(() => wFetch('google_ads',['date','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to})),
     ]);
 
-    // ── Shopify by date ──
+    // ── 第二批：比較用數據 ──
+    const [shFeb, shQ4, sh25, fbCamp, gadsCamp, storeMar, ga4Src] = await Promise.all([
+      safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:feb_from,date_to:feb_to})),
+      safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:q4_from,date_to:q4_to})),
+      safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:y25_from,date_to:y25_to})),
+      safe(() => wFetch('facebook',['campaign_name','spend','purchase_roas','actions'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}})),
+      safe(() => wFetch('google_ads',['campaign_name','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to})),
+      safe(() => wFetch('shopify',['date','order_retail_location_name','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['order_retail_location_name','notnull',null]]})),
+      safe(() => wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to})),
+    ]);
+
+    // ── 處理 Shopify 3月 ──
     const shM = {};
-    shMar.forEach(r=>{if(!shM[r.date])shM[r.date]=0; shM[r.date]+=+r.order_net_sales||0;});
+    shMar.forEach(r=>{ if(!shM[r.date])shM[r.date]=0; shM[r.date]+=+r.order_net_sales||0; });
     S3 = shM;
-    const shF={};
-    shFeb.forEach(r=>{if(!shF[r.date])shF[r.date]=0; shF[r.date]+=+r.order_net_sales||0;});
+
+    // ── 處理 Shopify 2月 ──
+    const shF = {};
+    shFeb.forEach(r=>{ if(!shF[r.date])shF[r.date]=0; shF[r.date]+=+r.order_net_sales||0; });
     S2 = shF;
-    const shQ={};
-    shQ4.forEach(r=>{if(!shQ[r.date])shQ[r.date]=0; shQ[r.date]+=+r.order_net_sales||0;});
+
+    // ── 處理 Q4 ──
+    const shQ = {};
+    shQ4.forEach(r=>{ if(!shQ[r.date])shQ[r.date]=0; shQ[r.date]+=+r.order_net_sales||0; });
     S25Q4 = shQ;
-    const sh5={};
-    sh25.forEach(r=>{if(!sh5[r.date])sh5[r.date]=0; sh5[r.date]+=+r.order_net_sales||0;});
+
+    // ── 處理 2025/3月 YoY ──
+    const sh5 = {};
+    sh25.forEach(r=>{ if(!sh5[r.date])sh5[r.date]=0; sh5[r.date]+=+r.order_net_sales||0; });
     S25_3 = Object.fromEntries(Object.entries(sh5).map(([d,v])=>[d.slice(5),v]));
 
-    // ── GA4 by date ──
-    const ga4M={};
+    // ── 處理 GA4 ──
+    const ga4M = {};
     ga4Mar.forEach(r=>{
       if(!ga4M[r.date])ga4M[r.date]={s:0,atc:0,tx:0,rev:0};
       ga4M[r.date].s  +=+r.sessions||0;
@@ -861,34 +859,28 @@ async function loadAllData() {
     });
     GA3 = ga4M;
 
-    // ── Facebook by date — purchase_roas 是 array，取 7d_click ──
+    // ── 處理 FB（purchase_roas 是 array，取 7d_click）──
     const parseRoas = (v) => {
       if(!v) return 0;
-      if(Array.isArray(v)){
-        const obj = v.find(x=>x['7d_click']);
-        return obj ? +obj['7d_click'] : 0;
-      }
-      return +v || 0;
+      if(Array.isArray(v)){ const o=v.find(x=>x['7d_click']); return o?+o['7d_click']:0; }
+      return +v||0;
     };
-    const fbM={};
+    const fbM = {};
     fbMar.forEach(r=>{
       if(!fbM[r.date])fbM[r.date]={sp:0,_rs:0,_sw:0};
-      const sp=+r.spend||0;
-      fbM[r.date].sp+=sp;
+      const sp=+r.spend||0; fbM[r.date].sp+=sp;
       const roas=parseRoas(r.purchase_roas);
-      fbM[r.date]._rs+=sp*roas;
-      fbM[r.date]._sw+=sp;
+      fbM[r.date]._rs+=sp*roas; fbM[r.date]._sw+=sp;
     });
     FB3 = Object.fromEntries(Object.entries(fbM).map(([d,v])=>[d,{sp:v.sp,roas:v._sw?v._rs/v._sw:0}]));
 
-    // ── FB Campaigns ──
-    const fbCM={};
+    // ── 處理 FB 活動 ──
+    const fbCM = {};
     fbCamp.forEach(r=>{
-      if(!(+r.spend>0))return;
+      if(!(+r.spend>0)) return;
       const k=r.campaign_name||'?';
       if(!fbCM[k])fbCM[k]={n:k,sp:0,_rs:0,_sw:0,pur:0};
-      const sp=+r.spend||0;
-      fbCM[k].sp+=sp;
+      const sp=+r.spend||0; fbCM[k].sp+=sp;
       const roas=parseRoas(r.purchase_roas);
       fbCM[k]._rs+=sp*roas; fbCM[k]._sw+=sp;
       if(Array.isArray(r.actions)){
@@ -898,29 +890,27 @@ async function loadAllData() {
     });
     FB_CAMP = Object.values(fbCM).map(r=>({...r,roas:r._sw?r._rs/r._sw:0})).sort((a,b)=>b.roas-a.roas);
 
-    // ── Google Ads by date ──
-    const gaM={};
+    // ── 處理 Google Ads ──
+    const gaM = {};
     gadsMar.forEach(r=>{
       if(!gaM[r.date])gaM[r.date]={sp:0,_rv:0};
-      gaM[r.date].sp+=+r.cost||0;
-      gaM[r.date]._rv+=+r.conversions_value||0;
+      gaM[r.date].sp+=+r.cost||0; gaM[r.date]._rv+=+r.conversions_value||0;
     });
     Object.entries(gaM).forEach(([d,v])=>{v.roas=v.sp?v._rv/v.sp:0;});
     GAADS = gaM;
 
-    // ── Google Ads Campaigns ──
-    const gaCM={};
+    // ── 處理 Google Ads 活動 ──
+    const gaCM = {};
     gadsCamp.forEach(r=>{
-      if(!(+r.cost>0))return;
+      if(!(+r.cost>0)) return;
       const k=r.campaign_name||'?';
       if(!gaCM[k])gaCM[k]={n:k,sp:0,rev:0};
-      gaCM[k].sp+=+r.cost||0;
-      gaCM[k].rev+=+r.conversions_value||0;
+      gaCM[k].sp+=+r.cost||0; gaCM[k].rev+=+r.conversions_value||0;
     });
     GA_CAMP = Object.values(gaCM).map(r=>({...r,roas:r.sp?r.rev/r.sp:0})).sort((a,b)=>b.roas-a.roas);
 
-    // ── Store (dict: date → {store→amt}) ──
-    const stM={};
+    // ── 處理門市 ──
+    const stM = {};
     storeMar.forEach(r=>{
       if(!stM[r.date])stM[r.date]={};
       const s=r.order_retail_location_name||'?';
@@ -928,60 +918,37 @@ async function loadAllData() {
     });
     STORE_DATA = stM;
 
-    // ── GA4 Source ──
+    // ── 處理 GA4 來源 ──
     GA4_SRC = ga4Src
       .filter(r=>+r.transactions>0)
-      .map(r=>({
-        src:`${r.source}/${r.medium}`,
-        s:+r.sessions||0,
-        tx:+r.transactions||0,
-        rev:+r.purchase_revenue||0
-      }))
+      .map(r=>({src:`${r.source}/${r.medium}`,s:+r.sessions||0,tx:+r.transactions||0,rev:+r.purchase_revenue||0}))
       .sort((a,b)=>b.tx-a.tx);
-
-    // ── 商品排行（by date → array of {d,t,q,p}）──
-    LINE_ITEMS_RAW = (lineItems||[]).map(r=>({
-      d: r.date,
-      t: r['line_item__title']||'?',
-      q: +r['line_item__quantity']||0,
-      p: +r['line_item__price']||0
-    })).filter(r=>r.q>0);
 
     DATA_READY = true;
     LOADING = false;
 
-    // Update UI
     const DK = Object.keys(S3).sort().filter(d=>d.startsWith('2026-03'));
     const last = DK[DK.length-1]||'';
     document.getElementById('tb-period').textContent =
       `${DK[0]?.slice(5)||''}–${last.slice(5)||''} · ${DK.length}天`;
 
-    // 更新 DR_CACHE 供素材分析用
     DR_CACHE = {from: mar_from, to: last||mar_to};
 
-    // Update day picker
+    // 更新日期選擇器
     const dp = document.getElementById('dayPick');
-    const dkRev = [...DK].reverse().filter(d=>S3[d]>1000); // 過濾不完整的今日
-    dp.innerHTML = dkRev.map((d,i)=>
-      `<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`
-    ).join('');
+    const dkRev = [...DK].reverse().filter(d=>S3[d]>1000);
+    dp.innerHTML = dkRev.map((d,i)=>`<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`).join('');
 
-    // 初始化素材時段日期選擇器
     const cpSel = document.getElementById('cpDayPick');
     if(cpSel){
-      const dkAll = DK_fn();
-      cpSel.innerHTML = [...dkAll].reverse().map((d,i)=>
-        `<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`
-      ).join('');
+      cpSel.innerHTML = [...DK].reverse().map((d,i)=>`<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`).join('');
     }
-    // 初始化 cpLabel 顯示近30天
     const cpLbl = document.getElementById('cpLabel');
-    const dk30 = DK_fn();
-    if(cpLbl && dk30.length) cpLbl.textContent = `近30天 (${dk30[0].slice(5)}–${dk30[dk30.length-1].slice(5)})`;
+    if(cpLbl && DK.length) cpLbl.textContent = `近30天 (${DK[0].slice(5)}–${DK[DK.length-1].slice(5)})`;
     const mpl = document.getElementById('metaCreativePeriod');
     const gpl = document.getElementById('googleCreativePeriod');
-    if(mpl && dk30.length) mpl.textContent = `${dk30[0].slice(5)}–${dk30[dk30.length-1].slice(5)}`;
-    if(gpl && dk30.length) gpl.textContent = `${dk30[0].slice(5)}–${dk30[dk30.length-1].slice(5)}`;
+    if(mpl && DK.length) mpl.textContent = `${DK[0].slice(5)}–${DK[DK.length-1].slice(5)}`;
+    if(gpl && DK.length) gpl.textContent = `${DK[0].slice(5)}–${DK[DK.length-1].slice(5)}`;
 
     drawPage(curPage);
 
@@ -991,6 +958,7 @@ async function loadAllData() {
     document.getElementById('tb-period').textContent = `⚠️ 載入失敗：${e.message}`;
   }
 }
+
 
 async function doRefresh(){
   const btn=document.getElementById('rfBtn');
@@ -1309,114 +1277,166 @@ document.getElementById('tkInput')?.addEventListener('keydown',e=>{if(e.key==='E
 
 
 function renderProductRank() {
-  // 取得有資料的日期（PROD_RAW 含靜態資料 3/24-3/30）
-  const availDates = [...new Set(PROD_RAW.map(r=>r.d))].sort();
+  try {
+    // 取得 PROD_RAW 所有日期
+    const availDates = [...new Set(PROD_RAW.map(r=>r.d))].sort();
 
-  // 初始化日期選擇按鈕
-  const btnContainer = document.getElementById('prodDayBtns');
-  if (btnContainer && !btnContainer.dataset.init) {
-    btnContainer.dataset.init = '1';
-    // 「累計」按鈕 + 各日按鈕
-    const allBtn = document.createElement('button');
-    allBtn.className = 'tpb on'; allBtn.id = 'prodBtn-all';
-    allBtn.textContent = '累計'; allBtn.onclick = () => renderProductRankByDate('all', allBtn);
-    btnContainer.appendChild(allBtn);
+    // 建立/更新日期選擇按鈕
+    const btnContainer = document.getElementById('prodDayBtns');
+    if (btnContainer) {
+      // 每次都重建（避免 init 狀態問題）
+      btnContainer.innerHTML = '';
 
-    availDates.forEach(d => {
-      const b = document.createElement('button');
-      b.className = 'tpb'; b.id = 'prodBtn-' + d;
-      b.textContent = d.slice(5);
-      b.onclick = () => renderProductRankByDate(d, b);
-      btnContainer.appendChild(b);
+      // 「累計」按鈕
+      const allBtn = document.createElement('button');
+      allBtn.className = 'tpb on';
+      allBtn.textContent = '累計';
+      allBtn.onclick = function() {
+        btnContainer.querySelectorAll('.tpb').forEach(b=>b.classList.remove('on'));
+        allBtn.classList.add('on');
+        renderProductRankByDate('all');
+      };
+      btnContainer.appendChild(allBtn);
+
+      // 各日按鈕
+      availDates.forEach(d => {
+        const b = document.createElement('button');
+        b.className = 'tpb';
+        b.textContent = d.slice(5);
+        b.onclick = function() {
+          btnContainer.querySelectorAll('.tpb').forEach(x=>x.classList.remove('on'));
+          b.classList.add('on');
+          renderProductRankByDate(d);
+        };
+        btnContainer.appendChild(b);
+      });
+    }
+
+    // 預設顯示累計
+    renderProductRankByDate('all');
+
+  } catch(err) {
+    console.error('renderProductRank error:', err);
+    const tq = document.getElementById('tProdQty');
+    if(tq) tq.innerHTML = '<tr><td colspan="4" style="color:var(--red);padding:12px">⚠️ ' + err.message + '</td></tr>';
+  }
+}
+
+
+
+function renderProductRankByDate(selDay) {
+  try {
+    const rows = selDay === 'all' ? PROD_RAW : PROD_RAW.filter(r => r.d === selDay);
+
+    // 更新期間標籤
+    const lbl = document.getElementById('prodPeriodLabel');
+    if (lbl) {
+      if (selDay === 'all') {
+        const dates = [...new Set(PROD_RAW.map(r=>r.d))].sort();
+        lbl.textContent = '累計 ' + (dates.length ? dates[0].slice(5) + '–' + dates[dates.length-1].slice(5) : '');
+      } else {
+        lbl.textContent = selDay.slice(5);
+      }
+    }
+
+    // 無資料
+    if (!rows.length) {
+      const noData = '<tr><td colspan="4" style="color:var(--t3);padding:16px;text-align:center">此日無資料</td></tr>';
+      const tq = document.getElementById('tProdQty');
+      if(tq) tq.innerHTML = '<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>' + noData + '</tbody>';
+      const tr = document.getElementById('tProdRev');
+      if(tr) tr.innerHTML = '<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>' + noData + '</tbody>';
+      return;
+    }
+
+    // 合併同款（去除顏色後綴）
+    const byName = {};
+    rows.forEach(r => {
+      // 移除末尾的括號內容，如 (黑)、（黑）
+      let base = r.t;
+      base = base.replace(/\s*\([^\)]*\)\s*$/, '').trim();
+      base = base.replace(/\s*（[^）]*）\s*$/, '').trim();
+      if (!byName[base]) byName[base] = { name: base, qty: 0, rev: 0 };
+      byName[base].qty += Number(r.q) || 0;
+      byName[base].rev += (Number(r.q) || 0) * (Number(r.p) || 0);
     });
-  }
 
-  renderProductRankByDate('all', document.getElementById('prodBtn-all'));
+    const all = Object.values(byName).filter(r => r.qty > 0);
+    const byQty = [...all].sort((a, b) => b.qty - a.qty).slice(0, 20);
+    const byRev = [...all].sort((a, b) => b.rev - a.rev).slice(0, 20);
+    const maxQty = (byQty[0] || {}).qty || 1;
+    const maxRev = (byRev[0] || {}).rev || 1;
+
+    const pRow = function(i, r, isRev) {
+      const val = isRev ? r.rev : r.qty;
+      const max = isRev ? maxRev : maxQty;
+      const pct = Math.round(val / max * 100);
+      const color = isRev ? 'var(--grn)' : 'var(--blue)';
+      const valStr = isRev ? ('NT$' + Math.round(r.rev).toLocaleString()) : (r.qty + '件');
+      return '<tr>' +
+        '<td style="color:var(--t3);font-size:10px;width:20px">' + (i+1) + '</td>' +
+        '<td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + r.name + '</td>' +
+        '<td class="mn">' + valStr + '</td>' +
+        '<td style="width:80px"><div style="height:4px;background:var(--s4);border-radius:2px">' +
+        '<div style="height:4px;width:' + pct + '%;background:' + color + ';border-radius:2px"></div>' +
+        '</div></td></tr>';
+    };
+
+    const tq = document.getElementById('tProdQty');
+    if(tq) {
+      let html = '<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>';
+      byQty.forEach(function(r, i) { html += pRow(i, r, false); });
+      html += '</tbody>';
+      tq.innerHTML = html;
+    }
+
+    const tr = document.getElementById('tProdRev');
+    if(tr) {
+      let html = '<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>';
+      byRev.forEach(function(r, i) { html += pRow(i, r, true); });
+      html += '</tbody>';
+      tr.innerHTML = html;
+    }
+
+    // 品類圓餅
+    const byCat = {};
+    rows.forEach(r => {
+      // 用商品名第一個空格前的字串當品類
+      const name = r.t || '';
+      let cat = name.split(' ')[0] || '其他';
+      // 去掉 ™ 符號
+      cat = cat.replace(/™/g, '');
+      if (!byCat[cat]) byCat[cat] = 0;
+      byCat[cat] += Number(r.q) || 0;
+    });
+    const catKeys = Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];}).slice(0, 8);
+    const catClrs = ['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d','#00bcd4'];
+
+    if(CHARTS['cProdCat']){ CHARTS['cProdCat'].destroy(); delete CHARTS['cProdCat']; }
+    mkChart('cProdCat', {
+      type: 'doughnut',
+      data: { labels: catKeys, datasets: [{ data: catKeys.map(function(k){return byCat[k];}), backgroundColor: catClrs, borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
+        plugins: { legend: { display: true, position: 'right', labels: { color: '#3d5070', font: { size: 10 }, boxWidth: 8 } },
+          tooltip: { callbacks: { label: function(ctx){ return ctx.label + ': ' + ctx.parsed + '件'; } } } } }
+    });
+
+    const tc = document.getElementById('tProdCatTbl');
+    if(tc) {
+      let html = '<thead><tr><th class="tl">品類</th><th>數量</th></tr></thead><tbody>';
+      catKeys.forEach(function(k){ html += '<tr><td class="tl">' + k + '</td><td class="mn">' + byCat[k] + '件</td></tr>'; });
+      html += '</tbody>';
+      tc.innerHTML = html;
+    }
+
+  } catch(err) {
+    console.error('renderProductRankByDate error:', err);
+    const tq = document.getElementById('tProdQty');
+    if(tq) tq.innerHTML = '<tr><td colspan="4" style="color:var(--red);padding:12px">⚠️ ' + err.message + '</td></tr>';
+  }
 }
 
-function renderProductRankByDate(selDay, btn) {
-  // 高亮選中按鈕
-  document.querySelectorAll('#prodDayBtns .tpb').forEach(b => b.classList.remove('on'));
-  if (btn) btn.classList.add('on');
 
-  // 篩選資料
-  const rows = selDay === 'all'
-    ? PROD_RAW
-    : PROD_RAW.filter(r => r.d === selDay);
-
-  const lbl = document.getElementById('prodPeriodLabel') || { textContent: '' };
-  if (selDay === 'all') {
-    const dates = [...new Set(PROD_RAW.map(r=>r.d))].sort();
-    lbl.textContent = dates.length ? `累計（${dates[0].slice(5)}–${dates[dates.length-1].slice(5)}）` : '累計';
-  } else {
-    lbl.textContent = selDay.slice(5);
-  }
-
-  // Aggregate by base product name
-  const byName = {};
-  rows.forEach(r => {
-    const base = r.t.replace(/\s*[（(（][^)）)]*[)）)][\s*（(]?[^)）)]*[)）)]*$/g, '').replace(/\s*[（(（][^)）)]*[)）)]$/, '').trim();
-    if (!byName[base]) byName[base] = { name: base, qty: 0, rev: 0 };
-    byName[base].qty += +r.q || 0;
-    byName[base].rev += (+r.q || 0) * (+r.p || 0);
-  });
-
-  const all = Object.values(byName).filter(r => r.qty > 0);
-
-  if (!all.length) {
-    const msg = '<tr><td colspan="4" style="color:var(--t3);padding:16px;text-align:center">此日無資料</td></tr>';
-    const tq = document.getElementById('tProdQty'); if(tq) tq.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>'+msg+'</tbody>';
-    const tr = document.getElementById('tProdRev'); if(tr) tr.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>'+msg+'</tbody>';
-    if(CHARTS['cProdCat']){CHARTS['cProdCat'].destroy();delete CHARTS['cProdCat'];}
-    return;
-  }
-
-  const byQty = [...all].sort((a, b) => b.qty - a.qty).slice(0, 20);
-  const byRev = [...all].sort((a, b) => b.rev - a.rev).slice(0, 20);
-  const maxQty = byQty[0]?.qty || 1;
-  const maxRev = byRev[0]?.rev || 1;
-
-  const pRow = (i, r, isRev) => {
-    const val = isRev ? r.rev : r.qty;
-    const max = isRev ? maxRev : maxQty;
-    const pct = (val / max * 100).toFixed(0);
-    const color = isRev ? 'var(--grn)' : 'var(--blue)';
-    return `<tr>
-      <td style="color:var(--t3);font-size:10px;width:20px">${i+1}</td>
-      <td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
-      <td class="mn">${isRev ? fmt(r.rev) : r.qty+'件'}</td>
-      <td style="width:80px"><div style="height:4px;background:var(--s4);border-radius:2px">
-        <div style="height:4px;width:${pct}%;background:${color};border-radius:2px"></div>
-      </div></td></tr>`;
-  };
-
-  const tq = document.getElementById('tProdQty');
-  if(tq) tq.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>'+
-    byQty.map((r,i)=>pRow(i,r,false)).join('')+'</tbody>';
-  const tr = document.getElementById('tProdRev');
-  if(tr) tr.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>'+
-    byRev.map((r,i)=>pRow(i,r,true)).join('')+'</tbody>';
-
-  // 品類圓餅
-  const byCat = {};
-  rows.forEach(r => {
-    const cat = r.t.split('™')[0].split(' ')[0].trim() || '其他';
-    if (!byCat[cat]) byCat[cat] = 0;
-    byCat[cat] += +r.q || 0;
-  });
-  const catKeys = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).slice(0,8);
-  const catClrs = ['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d','#00bcd4'];
-  if(CHARTS['cProdCat']){CHARTS['cProdCat'].destroy();delete CHARTS['cProdCat'];}
-  mkChart('cProdCat',{type:'doughnut',data:{
-    labels:catKeys,datasets:[{data:catKeys.map(k=>byCat[k]),backgroundColor:catClrs,borderWidth:0}]
-  },options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
-    plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:10},boxWidth:8}},
-             tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed}件`}}}}});
-
-  const tc = document.getElementById('tProdCatTbl');
-  if(tc) tc.innerHTML='<thead><tr><th class="tl">品類</th><th>數量</th></tr></thead><tbody>'+
-    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${byCat[k]}件</td></tr>`).join('')+'</tbody>';
-}
 
 
 // ── 來源媒介 ──
@@ -2650,65 +2670,7 @@ function renderStore() {
 }
 
 
-function renderProductRank(){
-  const day = document.getElementById('productDayPick').value;
-  const rows = PROD_RAW.filter(r=>r.d===day);
 
-  // Aggregate by base product name (strip color)
-  const byName = {};
-  rows.forEach(r=>{
-    const base = r.t.replace(/\s*\([^)]*\)\s*$/, '').trim(); // remove last (color)
-    if(!byName[base]) byName[base]={name:base,qty:0,rev:0,full:r.t};
-    byName[base].qty += r.q;
-    byName[base].rev += r.q * r.p;
-  });
-  const all = Object.values(byName);
-  const byQty = [...all].sort((a,b)=>b.qty-a.qty).slice(0,20);
-  const byRev = [...all].sort((a,b)=>b.rev-a.rev).slice(0,20);
-
-  const pRow=(i,r,val,isRev)=>{
-    const pct=isRev?Math.round(r.rev/byRev[0].rev*100):Math.round(r.qty/byQty[0].qty*100);
-    const color=i===0?'var(--amb)':i===1?'var(--t2)':i===2?'#cd7f32':'var(--t3)';
-    return`<tr><td class="tl" style="font-family:var(--mono);color:${color};font-size:10px;width:24px">#${i+1}</td>
-      <td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</td>
-      <td class="mn">${isRev?fmt(r.rev):`${r.qty}件`}</td>
-      <td style="min-width:60px"><div style="height:4px;background:var(--s4);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:4px;background:${i<3?'var(--amb)':'var(--blue)'};border-radius:2px"></div></div></td></tr>`;
-  };
-
-  document.getElementById('tProdQty').innerHTML=
-    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售量</th><th></th></tr></thead><tbody>`+
-    byQty.map((r,i)=>pRow(i,r,r.qty,false)).join('')+'</tbody>';
-  document.getElementById('tProdRev').innerHTML=
-    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售額</th><th></th></tr></thead><tbody>`+
-    byRev.map((r,i)=>pRow(i,r,r.rev,true)).join('')+'</tbody>';
-
-  // Category pie
-  const cats = {};
-  rows.forEach(r=>{
-    let cat='其他';
-    if(r.t.includes('乳清')) cat='乳清蛋白';
-    else if(r.t.includes('長褲')||r.t.includes('短褲')||r.t.includes('短褲')) cat='褲類';
-    else if(r.t.includes('背心')||r.t.includes('挖背')) cat='背心類';
-    else if(r.t.includes('上衣')||r.t.includes('短袖')||r.t.includes('落肩')||r.t.includes('訓練上衣')) cat='上衣類';
-    else if(r.t.includes('哥吉拉')) cat='哥吉拉聯名';
-    else if(r.t.includes('外套')||r.t.includes('夾克')||r.t.includes('襯衫')) cat='外套類';
-    else if(r.t.includes('瑜珈')||r.t.includes('蜜臀')) cat='女裝';
-    else if(r.t.includes('帽')||r.t.includes('襪')||r.t.includes('拉力帶')||r.t.includes('購物袋')) cat='配件';
-    if(!cats[cat]) cats[cat]=0;
-    cats[cat]+=r.q;
-  });
-  const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
-  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff4d4d','#ff6b9d','#ffd07a'];
-  mkChart('cProdCat',{type:'doughnut',data:{
-    labels:catKeys,
-    datasets:[{data:catKeys.map(k=>cats[k]),backgroundColor:clrs.slice(0,catKeys.length),borderWidth:0,hoverOffset:4}]
-  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
-  plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:9},boxWidth:8}},tooltip:AX.tt}}});
-
-  document.getElementById('tProdCatTbl').innerHTML=
-    `<thead><tr><th class="tl">品類</th><th>件數</th></tr></thead><tbody>`+
-    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${cats[k]}</td></tr>`).join('')+'</tbody>';
-}
 
 // ── 來源媒介 ──
 
