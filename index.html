@@ -1100,68 +1100,8 @@ function drawGA4(){
 }
 
 // ─── Shopify ───
-function drawShopify(){
-  const tp=getTPDays();
-  const{days,vals,mode}=tp;
-  document.getElementById('badge-shopify').textContent=mode==='30d'?`近30天`:mode==='mom'?'MoM':mode==='week'?'週對比':mode==='yoy'?'YoY':'單日';
-  document.getElementById('shopify-cmp').innerHTML=buildCmpKPI(tp);
-  buildCmpChart('cShopSales',tp,'bar');
 
-  // Sub-tabs
-  if(!document.getElementById('sh-order').innerHTML.trim()||mode!==lastShopifyMode){
-    lastShopifyMode=mode;
-    renderShopifyOrderTable(days);
-  }
-}
-let lastShopifyMode=null;
 
-function renderShopifyOrderTable(days){
-  const DK=days;
-  const rows=[...DK].reverse().map(d=>{
-    const v=S3[d]||0,cnt=Object.values(S3).reduce ? 1:0;
-    return`<tr><td class="tl mn" style="color:var(--t3)">${d}</td><td class="mn" style="color:${v>=200000?'var(--grn)':v>=100000?'var(--t1)':'var(--red)'}">${fmt(v)}</td><td class="mn">${(GA3[d]?.tx||0)}</td><td class="mn">${fmt((GA3[d]?.rev||0))}</td><td><span class="pill ${v>=200000?'pg':v>=100000?'py':'pr'}">${(v/200000*100).toFixed(0)}%</span></td><td>${dh(v,days[days.indexOf(d)+1]?S3[days[days.indexOf(d)+1]]:null)}</td></tr>`;
-  }).join('');
-  const el=document.getElementById('sh-order');
-  if(el) el.innerHTML=`<table><thead><tr><th class="tl">日期</th><th>淨銷售</th><th>GA4購買</th><th>GA4收益</th><th>KPI%</th><th>日對比</th></tr></thead><tbody>${rows}</tbody></table>`;
-
-  // Store table
-  const storeEl=document.getElementById('sh-store');
-  if(storeEl){
-    const dates=Object.keys(STORE_DATA).sort();
-    const stores=[...new Set(dates.flatMap(d=>Object.keys(STORE_DATA[d])))];
-    const grand=stores.reduce((s,st)=>s+dates.reduce((ss,d)=>ss+(STORE_DATA[d]?.[st]||0),0),0);
-    const storeTotals=Object.fromEntries(stores.map(s=>[s,dates.reduce((ss,d)=>ss+(STORE_DATA[d]?.[s]||0),0)]));
-
-    // Pie chart data
-    const clrs=['#f0a020','#28d97a','#9d7fff'];
-    const onlineTotal = sumO(S3) - grand;
-
-    storeEl.innerHTML=`
-      <div class="g2">
-        <div class="card"><div class="ct">門市 vs 線上</div>
-          <canvas id="cStorePie" style="max-height:200px"></canvas>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
-            ${stores.map((s,i)=>`<div class="store-leg" style="--c:${clrs[i]}"><span style="font-size:11px">${s.split('-')[1]||s}</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px">${fmt(storeTotals[s])}</span></div>`).join('')}
-            <div class="store-leg" style="--c:#4b8eff"><span style="font-size:11px">官網(線上)</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px">${fmt(onlineTotal)}</span></div>
-          </div>
-        </div>
-        <div class="card"><div class="ct">門市日別明細</div><div class="tw" style="max-height:240px;overflow-y:auto"><table>
-          <thead><tr><th class="tl">日期</th>${stores.map(s=>`<th>${s.split('-')[1]||s}</th>`).join('')}<th>合計</th></tr></thead>
-          <tbody>${[...dates].reverse().map(d=>{const tot=Object.values(STORE_DATA[d]||{}).reduce((s,v)=>s+v,0);return`<tr><td class="tl mn" style="color:var(--t3)">${d}</td>${stores.map(s=>`<td class="mn">${STORE_DATA[d]?.[s]?fmt(STORE_DATA[d][s]):'—'}</td>`).join('')}<td class="mn" style="font-weight:600">${fmt(tot)}</td></tr>`;}).join('')}
-          </tbody>
-        </table></div></div>
-      </div>`;
-
-    setTimeout(()=>{
-      mkChart('cStorePie',{type:'doughnut',data:{
-        labels:[...stores.map(s=>s.split('-')[1]||s),'官網(線上)'],
-        datasets:[{data:[...stores.map(s=>storeTotals[s]),onlineTotal],backgroundColor:[...clrs.slice(0,stores.length),'#4b8eff'],borderWidth:0}]
-      },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
-    },50);
-  }
-}
-
-// ─── 廣告成效 ───
 function drawAds(){
   const tp=getTPDays();
   const{days,mode}=tp;
@@ -1204,6 +1144,974 @@ function drawOpt(){
 
 // ═══ INIT ═══
 document.getElementById('tkInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+
+
+
+function renderProductRank(){
+  const day = document.getElementById('productDayPick').value;
+  const rows = PROD_RAW.filter(r=>r.d===day);
+
+  // Aggregate by base product name (strip color)
+  const byName = {};
+  rows.forEach(r=>{
+    const base = r.t.replace(/\s*\([^)]*\)\s*$/, '').trim(); // remove last (color)
+    if(!byName[base]) byName[base]={name:base,qty:0,rev:0,full:r.t};
+    byName[base].qty += r.q;
+    byName[base].rev += r.q * r.p;
+  });
+  const all = Object.values(byName);
+  const byQty = [...all].sort((a,b)=>b.qty-a.qty).slice(0,20);
+  const byRev = [...all].sort((a,b)=>b.rev-a.rev).slice(0,20);
+
+  const pRow=(i,r,val,isRev)=>{
+    const pct=isRev?Math.round(r.rev/byRev[0].rev*100):Math.round(r.qty/byQty[0].qty*100);
+    const color=i===0?'var(--amb)':i===1?'var(--t2)':i===2?'#cd7f32':'var(--t3)';
+    return`<tr><td class="tl" style="font-family:var(--mono);color:${color};font-size:10px;width:24px">#${i+1}</td>
+      <td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</td>
+      <td class="mn">${isRev?fmt(r.rev):`${r.qty}件`}</td>
+      <td style="min-width:60px"><div style="height:4px;background:var(--s4);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:4px;background:${i<3?'var(--amb)':'var(--blue)'};border-radius:2px"></div></div></td></tr>`;
+  };
+
+  document.getElementById('tProdQty').innerHTML=
+    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售量</th><th></th></tr></thead><tbody>`+
+    byQty.map((r,i)=>pRow(i,r,r.qty,false)).join('')+'</tbody>';
+  document.getElementById('tProdRev').innerHTML=
+    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售額</th><th></th></tr></thead><tbody>`+
+    byRev.map((r,i)=>pRow(i,r,r.rev,true)).join('')+'</tbody>';
+
+  // Category pie
+  const cats = {};
+  rows.forEach(r=>{
+    let cat='其他';
+    if(r.t.includes('乳清')) cat='乳清蛋白';
+    else if(r.t.includes('長褲')||r.t.includes('短褲')||r.t.includes('短褲')) cat='褲類';
+    else if(r.t.includes('背心')||r.t.includes('挖背')) cat='背心類';
+    else if(r.t.includes('上衣')||r.t.includes('短袖')||r.t.includes('落肩')||r.t.includes('訓練上衣')) cat='上衣類';
+    else if(r.t.includes('哥吉拉')) cat='哥吉拉聯名';
+    else if(r.t.includes('外套')||r.t.includes('夾克')||r.t.includes('襯衫')) cat='外套類';
+    else if(r.t.includes('瑜珈')||r.t.includes('蜜臀')) cat='女裝';
+    else if(r.t.includes('帽')||r.t.includes('襪')||r.t.includes('拉力帶')||r.t.includes('購物袋')) cat='配件';
+    if(!cats[cat]) cats[cat]=0;
+    cats[cat]+=r.q;
+  });
+  const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
+  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff4d4d','#ff6b9d','#ffd07a'];
+  mkChart('cProdCat',{type:'doughnut',data:{
+    labels:catKeys,
+    datasets:[{data:catKeys.map(k=>cats[k]),backgroundColor:clrs.slice(0,catKeys.length),borderWidth:0,hoverOffset:4}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+  plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:9},boxWidth:8}},tooltip:AX.tt}}});
+
+  document.getElementById('tProdCatTbl').innerHTML=
+    `<thead><tr><th class="tl">品類</th><th>件數</th></tr></thead><tbody>`+
+    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${cats[k]}</td></tr>`).join('')+'</tbody>';
+}
+
+// ── 來源媒介 ──
+
+function renderShopee(){
+  if(CHARTS['cShopeeFlavor']) return; // already rendered
+
+  // Flavor bar chart
+  const flavorClrs=['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d'];
+  mkChart('cShopeeFlavor',{type:'bar',data:{
+    labels:SHOPEE_FLAVOR.map(f=>f.f),
+    datasets:[{label:'銷售量(包)',data:SHOPEE_FLAVOR.map(f=>f.q),backgroundColor:flavorClrs,borderRadius:4}]
+  },options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+  plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.x}包 / NT$${ctx.dataset.data[ctx.dataIndex]?SHOPEE_FLAVOR[ctx.dataIndex].r.toLocaleString():0}`}}},
+  scales:{x:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}},y:{ticks:AX.t,grid:{display:false},border:{color:'transparent'}}}}});
+
+  // Flavor table
+  const totQ=SHOPEE_FLAVOR.reduce((s,f)=>s+f.q,0);
+  document.getElementById('tShopeeFlavor').innerHTML=
+    `<thead><tr><th class="tl">口味</th><th>銷量</th><th>佔比</th><th>銷售額</th></tr></thead><tbody>`+
+    SHOPEE_FLAVOR.map((f,i)=>{
+      const pct=((f.q/totQ)*100).toFixed(1);
+      const bar=`<div style="display:flex;align-items:center;gap:5px"><div style="width:${Math.round(f.q/791*80)}px;height:4px;background:${flavorClrs[i]||'var(--blue)'};border-radius:2px"></div></div>`;
+      return`<tr><td class="tl">${f.f}</td><td class="mn">${f.q}包</td><td class="mn">${pct}%</td><td class="mn">${fmt(f.r)}</td></tr>`;
+    }).join('')+'</tbody>';
+
+  // Monthly trend
+  const monthlyClrs=SHOPEE_MONTH.map(m=>m.m.startsWith('2026')?'rgba(40,217,122,.7)':'rgba(75,142,255,.5)');
+  mkChart('cShopeeMonth',{type:'bar',data:{
+    labels:SHOPEE_MONTH.map(m=>m.m),
+    datasets:[{label:'銷量(包/件)',data:SHOPEE_MONTH.map(m=>m.q),backgroundColor:monthlyClrs,borderRadius:3}]
+  },options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.y}包/件 · NT$${SHOPEE_MONTH[ctx.dataIndex].r.toLocaleString()}`}}},
+  scales:{x:{ticks:{...AX.t,maxRotation:45},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+
+  // Apparel table
+  document.getElementById('tShopeeApparel').innerHTML=
+    `<thead><tr><th class="tl">日期</th><th class="tl">商品</th><th>數量</th><th>金額</th></tr></thead><tbody>`+
+    SHOPEE_APPAREL.map(a=>`<tr><td class="tl" style="font-family:var(--mono);color:var(--t3)">${a.t}</td>
+      <td class="tl">${a.n}</td><td class="mn" style="color:var(--pur)">${a.q}件</td>
+      <td class="mn" style="color:var(--amb)">${fmt(a.r)}</td></tr>`).join('')+'</tbody>';
+
+  // 2026 recent
+  document.getElementById('tShopeeRecent').innerHTML=
+    `<thead><tr><th class="tl">日期</th><th class="tl">商品</th><th>數量</th><th>金額</th></tr></thead><tbody>`+
+    SHOPEE_2026.map(r=>`<tr><td class="tl" style="font-family:var(--mono);color:var(--t3)">${r.t}</td>
+      <td class="tl">${r.n}</td><td class="mn">${r.q}</td><td class="mn">${fmt(r.r)}</td></tr>`).join('')+'</tbody>';
+}
+
+// ── 商品排行 ──
+
+function drawShopify(){
+  const tp=getTPDays();
+  const{days,vals,mode}=tp;
+  const DK=DK_fn();
+  document.getElementById('badge-shopify').textContent=mode==='30d'?`近30天(${DK[0]?.slice(5)}–${DK[DK.length-1]?.slice(5)})`:mode==='mom'?'MoM':mode==='week'?'週對比':mode==='yoy'?'YoY':'單日';
+  document.getElementById('shopify-cmp').innerHTML=buildCmpKPI(tp);
+  buildCmpChart('cShopSales',tp,'bar');
+  // 預設顯示第一個 sub-tab
+  const firstBtn = document.querySelector('.shtab');
+  if(firstBtn && !document.querySelector('.shtab.on')){
+    shTab('order', firstBtn);
+  } else {
+    // re-render active panel
+    const activePanel = document.querySelector('.sh-panel[style*="block"]');
+    if(activePanel){
+      const id = activePanel.id.replace('sh-','');
+      if(id==='order') renderShopifyOrder(days);
+      else if(id==='product') renderProductRank();
+      else if(id==='source') renderOrderSrc();
+      else if(id==='store') renderStore();
+      else if(id==='shopee') renderShopee();
+    } else {
+      shTab('order', document.querySelector('.shtab'));
+    }
+  }
+}
+
+
+// ═══ STATIC DATA (PROD_RAW, ORDER_SRC, SHOPEE_*) ═══
+const PROD_RAW = [
+  // 3/24
+  {d:'2026-03-24',t:'AROAK 全分離乳清 (生巧克力風味) (單包裝)',q:30,p:55},
+  {d:'2026-03-24',t:'AROAK 全分離乳清 (優格多多風味) (單包裝)',q:40,p:55},
+  {d:'2026-03-24',t:'AirFlex™ 磁釦機能口袋訓練長褲 (黑)',q:1,p:1680},
+  {d:'2026-03-24',t:'AirFlex™ 磁釦機能口袋訓練長褲 (黑)',q:2,p:1680},
+  {d:'2026-03-24',t:'AirFlex™ 磁釦機能口袋訓練長褲 (丈青)',q:1,p:1680},
+  {d:'2026-03-24',t:'AirFlex™ 機能基礎訓練長褲 (黑)',q:2,p:1180},
+  {d:'2026-03-24',t:'AirFlex™ 機能基礎訓練長褲 (淺灰)',q:1,p:1180},
+  {d:'2026-03-24',t:'AirFlex™ 機能基礎訓練長褲 (鐵灰)',q:1,p:1180},
+  {d:'2026-03-24',t:'ArcTech™ 機能拉鍊口袋長褲 (黑)',q:2,p:1480},
+  {d:'2026-03-24',t:'ArcTech™ 機能拉鍊口袋長褲 (黑)',q:2,p:1480},
+  {d:'2026-03-24',t:'ArcTech™ 機能拉鍊口袋長褲 (黑)',q:1,p:1480},
+  {d:'2026-03-24',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},
+  {d:'2026-03-24',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},
+  {d:'2026-03-24',t:'哥吉拉盲盒 (盲盒)',q:2,p:2280},
+  {d:'2026-03-24',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},
+  {d:'2026-03-24',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:1,p:390},
+  {d:'2026-03-24',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:1,p:390},
+  {d:'2026-03-24',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:2,p:390},
+  {d:'2026-03-24',t:'ArcTech™ 機能圓弧健身背心 (黑)',q:1,p:690},
+  {d:'2026-03-24',t:'ArcTech™ 機能圓弧健身背心 (白)',q:1,p:690},
+  {d:'2026-03-24',t:'ArcTech™ 機能圓弧健身背心 (淺灰)',q:1,p:690},
+  {d:'2026-03-24',t:'AirFlex™ 立領運動夾克 (丈青)',q:1,p:1680},
+  {d:'2026-03-24',t:'AirFlex™ 立領運動夾克 (丈青)',q:1,p:1680},
+  {d:'2026-03-24',t:'LightDry™ 輕盈機能開襟襯衫 (黑)',q:1,p:1880},
+  {d:'2026-03-24',t:'LightDry™ 輕盈機能開襟襯衫 (湖藍)',q:1,p:1880},
+  {d:'2026-03-24',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-24',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-24',t:'AirFlex™ 磁釦翻蓋口袋訓練短褲 (鐵灰)',q:1,p:1580},
+  {d:'2026-03-24',t:'AirSculpt™ 印花機能長褲 (黑)',q:1,p:1580},
+  {d:'2026-03-24',t:'AirSculpt™ 印花機能長褲 (橄欖灰)',q:1,p:1580},
+  // 3/25
+  {d:'2026-03-25',t:'AirFlex™ 磁釦機能口袋訓練長褲 (黑)',q:1,p:1680},
+  {d:'2026-03-25',t:'AirFlex™ 磁釦機能口袋訓練長褲 (丈青)',q:1,p:1680},
+  {d:'2026-03-25',t:'AirFlex™ 機能基礎訓練長褲 (黑)',q:1,p:1180},
+  {d:'2026-03-25',t:'AirFlex™ 機能基礎訓練長褲 (丈青)',q:1,p:1180},
+  {d:'2026-03-25',t:'ArcTech™ 機能拉鍊口袋長褲 (黑)',q:1,p:1480},
+  {d:'2026-03-25',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},
+  {d:'2026-03-25',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:1,p:390},
+  {d:'2026-03-25',t:'ArcTech™ 機能圓弧健身背心 (黑)',q:1,p:690},
+  {d:'2026-03-25',t:'ArcTech™ 機能圓弧健身背心 (白)',q:1,p:690},
+  {d:'2026-03-25',t:'AROAK 全分離乳清 (生巧克力風味) (單包裝)',q:1,p:55},
+  {d:'2026-03-25',t:'AirFlex™ 立領運動夾克 (丈青)',q:1,p:1680},
+  {d:'2026-03-25',t:'AirWarm™ 機能太空棉MA1外套 (黑)',q:1,p:2180},
+  {d:'2026-03-25',t:'ArcTech™ Elite剪接訓練上衣 (黑)',q:1,p:950},
+  {d:'2026-03-25',t:'ArcTech™ Elite剪接挖背訓練背心 (黑)',q:1,p:890},
+  {d:'2026-03-25',t:'ArcTech™ 機能訓練上衣 (黑)',q:1,p:790},
+  {d:'2026-03-25',t:'ArcTech™ 機能訓練上衣 (白)',q:1,p:790},
+  {d:'2026-03-25',t:'ArcTech™ 機能訓練上衣 (鐵灰)',q:1,p:790},
+  {d:'2026-03-25',t:'ArcTech™ 機能訓練上衣 (淺灰)',q:1,p:790},
+  {d:'2026-03-25',t:'ArcTech™ 機能拉克蘭短袖上衣 (淺灰)',q:1,p:790},
+  {d:'2026-03-25',t:'AirFlex™ OVERSIZED 短袖上衣 (丈青)',q:1,p:1080},
+  {d:'2026-03-25',t:'AirFlex™ OVERSIZED 短袖上衣 (經典黑)',q:1,p:1080},
+  {d:'2026-03-25',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (丈青)',q:1,p:1180},
+  {d:'2026-03-25',t:'AirFlex™ COLOR FLOW 戰士寬版拉克蘭袖上衣 (黑)',q:1,p:1380},
+  {d:'2026-03-25',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (橄欖灰)',q:1,p:1380},
+  {d:'2026-03-25',t:'哥吉拉不朽王者機能短袖上衣 (黑)',q:1,p:1480},
+  {d:'2026-03-25',t:'哥吉拉經典機能寛肩背心 (黑)',q:1,p:1280},
+  {d:'2026-03-25',t:'SIRO™-Shield 休閒短褲 (黑)',q:1,p:1480},
+  {d:'2026-03-25',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-25',t:'Lumin™ S型蜜臀開衩喇叭瑜珈褲 24-2 (黑)',q:1,p:1480},
+  {d:'2026-03-25',t:'AirFlex™ 女款機能訓練長褲 24-1 (黑)',q:1,p:1180},
+  {d:'2026-03-25',t:'TENCEL™-SGL 側挖短版背心 25-1 (白)',q:1,p:890},
+  {d:'2026-03-25',t:'FluxFit™ 寬肩剪接短版背心 25-2 (斜紋藍)',q:1,p:680},
+  {d:'2026-03-25',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (黑)',q:1,p:790},
+  // 3/26
+  {d:'2026-03-26',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:5,p:390},
+  {d:'2026-03-26',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (經典黑)',q:2,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (丈青)',q:2,p:1080},
+  {d:'2026-03-26',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},
+  {d:'2026-03-26',t:'AirSculpt™ 印花機能長褲 (黑)',q:2,p:1580},
+  {d:'2026-03-26',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:1,p:390},
+  {d:'2026-03-26',t:'AirSculpt™ 休閒印花短褲 (黑)',q:3,p:1280},
+  {d:'2026-03-26',t:'AirSculpt™ 休閒印花短褲 (白)',q:1,p:1280},
+  {d:'2026-03-26',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (白)',q:1,p:1380},
+  {d:'2026-03-26',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (黑)',q:1,p:1380},
+  {d:'2026-03-26',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (黑綠)',q:1,p:1380},
+  {d:'2026-03-26',t:'AirSculpt™ 美式復古短褲 (白)',q:1,p:1480},
+  {d:'2026-03-26',t:'AirSculpt™ OVERSIZED 短袖上衣 (黑)',q:1,p:1180},
+  {d:'2026-03-26',t:'AirSculpt™ OVERSIZED 短袖上衣 (白)',q:1,p:1180},
+  {d:'2026-03-26',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑)',q:2,p:1180},
+  {d:'2026-03-26',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (白)',q:1,p:1180},
+  {d:'2026-03-26',t:'哥吉拉不朽王者機能短袖上衣 (黑)',q:2,p:1480},
+  {d:'2026-03-26',t:'哥吉拉經典機能寛肩背心 (黑)',q:1,p:1280},
+  {d:'2026-03-26',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (黑)',q:2,p:1180},
+  {d:'2026-03-26',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (白)',q:2,p:1180},
+  {d:'2026-03-26',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (鐵灰)',q:2,p:1180},
+  {d:'2026-03-26',t:'TENCEL™-SGL 星耀落肩背心 (黑)',q:2,p:980},
+  {d:'2026-03-26',t:'TENCEL™-SGL 戰獅之魂背心 (黑)',q:2,p:980},
+  {d:'2026-03-26',t:'ArcTech™ OVERSIZED 文字印花機能上衣 (黑)',q:1,p:980},
+  {d:'2026-03-26',t:'ArcTech™ OVERSIZED 文字印花機能上衣 (鐵灰)',q:1,p:980},
+  {d:'2026-03-26',t:'ArcTech™ 機能訓練上衣 (黑)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能訓練上衣 (白)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能訓練上衣 (淺灰)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉克蘭短袖上衣 (黑)',q:2,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉克蘭短袖上衣 (白)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉克蘭短袖上衣 (深藍)',q:2,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉克蘭短袖上衣 (淺灰)',q:2,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉克蘭短袖上衣 (鐵灰)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ 機能圓弧健身背心 (白)',q:1,p:690},
+  {d:'2026-03-26',t:'ArcTech™ 機能圓弧健身背心 (淺灰)',q:1,p:690},
+  {d:'2026-03-26',t:'ArcTech™ 機能細肩挖背訓練背心 (黑)',q:1,p:690},
+  {d:'2026-03-26',t:'ArcTech™ 機能細肩挖背訓練背心 (深藍)',q:1,p:690},
+  {d:'2026-03-26',t:'ArcTech™ 機能寬肩訓練背心 (黑)',q:2,p:750},
+  {d:'2026-03-26',t:'ArcTech™ Elite剪接訓練上衣 (黑)',q:1,p:950},
+  {d:'2026-03-26',t:'ArcTech™ Elite 拉克蘭袖弧襬短袖上衣 (鐵灰)',q:1,p:950},
+  {d:'2026-03-26',t:'ArcTech™-BTH 機能脇邊拼接長褲 (鐵灰)',q:1,p:1580},
+  {d:'2026-03-26',t:'ArcTech™ 機能拉鍊口袋長褲 (棕粉)',q:1,p:1480},
+  {d:'2026-03-26',t:'ArcTech™ 機能開岔訓練短褲 (鐵灰)',q:2,p:1080},
+  {d:'2026-03-26',t:'ArcTech™ 機能開岔訓練短褲 (深藍)',q:2,p:1080},
+  {d:'2026-03-26',t:'ArcTech™ 極簡動能長褲 (鐵灰)',q:1,p:1380},
+  {d:'2026-03-26',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:2,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ 機能開岔訓練短褲 (果綠)',q:2,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ 機能開岔訓練短褲 (鐵灰)',q:2,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ 機能開岔訓練短褲 (淺灰)',q:2,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ 機能基礎訓練長褲 (鐵灰)',q:1,p:1180},
+  {d:'2026-03-26',t:'AirFlex™ 磁釦翻蓋口袋訓練短褲 (棕卡其)',q:1,p:1580},
+  {d:'2026-03-26',t:'AirFlex™ 拉鍊貼袋訓練短褲 (丈青)',q:1,p:1480},
+  {d:'2026-03-26',t:'SIRO™-Shield 休閒短褲 (黑)',q:1,p:1480},
+  {d:'2026-03-26',t:'立體 LOGO 休閒短褲 (黑)',q:1,p:1280},
+  {d:'2026-03-26',t:'弧型拼接機能短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-26',t:'LightDry™ 輕盈機能開襟襯衫 (黑)',q:1,p:1880},
+  {d:'2026-03-26',t:'LightDry™ 輕盈機能疾速短褲 (湖藍)',q:1,p:1380},
+  {d:'2026-03-26',t:'FluxFit™ 腋下拼接訓練上衣 (黑)',q:1,p:980},
+  {d:'2026-03-26',t:'FluxFit™ 腋下拼接訓練上衣 (荳寇棕)',q:1,p:980},
+  {d:'2026-03-26',t:'FlexSmooth™ 寬肩拉克蘭袖機能尼龍背心 (黑)',q:1,p:950},
+  {d:'2026-03-26',t:'FlexSmooth™ 寬肩拉克蘭袖機能尼龍背心 (淺灰)',q:1,p:950},
+  {d:'2026-03-26',t:'Doux™ 裸感收腹翹臀瑜珈褲24-1 (黑)',q:1,p:1180},
+  {d:'2026-03-26',t:'Doux™ 裸感曲線3分瑜珈褲24-1 (煙燻粉)',q:1,p:1080},
+  {d:'2026-03-26',t:'Doux™ 裸感曲線3分瑜珈褲 24-1 (黑)',q:1,p:1080},
+  {d:'2026-03-26',t:'AirFlex™ 窄肩訓練背心 (黑)',q:1,p:980},
+  {d:'2026-03-26',t:'AirFlex™ 窄肩訓練背心 (白)',q:1,p:980},
+  {d:'2026-03-26',t:'AirFlex™ 窄肩訓練背心 (丈青)',q:1,p:980},
+  {d:'2026-03-26',t:'HyperSkin™ 緊身背心 (黑)',q:1,p:1680},
+  {d:'2026-03-26',t:'ArcTech™ Essential Oversized Fit 拉克蘭袖上衣 (深藍)',q:1,p:890},
+  {d:'2026-03-26',t:'Airy™ 輕量機能疾速背心 (湖藍)',q:1,p:890},
+  {d:'2026-03-26',t:'Airy™ 輕量機能疾速背心 (犀牛灰)',q:1,p:890},
+  {d:'2026-03-26',t:'AROAK 耐磨皮革拉力帶 (黑) (一組2入)',q:1,p:1280},
+  {d:'2026-03-26',t:'AROAK 黑標五分帽 (淺灰)',q:1,p:580},
+  {d:'2026-03-26',t:'ArcTech™ Elite 細肩挖背訓練背心 (白)',q:1,p:850},
+  {d:'2026-03-26',t:'ArcTech™ 機能落肩訓練背心 (白)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ Essential 寬肩剪接背心 (白)',q:1,p:790},
+  {d:'2026-03-26',t:'ArcTech™ Essential 剪接弧襬背心 (深藍)',q:1,p:790},
+  // 3/27
+  {d:'2026-03-27',t:'AROAK 全分離乳清 (生巧克力風味) (單包裝)',q:60,p:55},
+  {d:'2026-03-27',t:'ArcTech™ 機能圓弧健身背心 (鐵灰)',q:1,p:690},{d:'2026-03-27',t:'ArcTech™ 機能圓弧健身背心 (深藍)',q:2,p:690},{d:'2026-03-27',t:'ArcTech™ 機能圓弧健身背心 (黑)',q:2,p:690},
+  {d:'2026-03-27',t:'ArcTech™ 機能細肩挖背訓練背心 (黑)',q:3,p:690},{d:'2026-03-27',t:'ArcTech™ 機能細肩挖背訓練背心 (白)',q:2,p:690},{d:'2026-03-27',t:'ArcTech™ 機能細肩挖背訓練背心 (深藍)',q:2,p:690},{d:'2026-03-27',t:'ArcTech™ 機能細肩挖背訓練背心 (鐵灰)',q:1,p:690},
+  {d:'2026-03-27',t:'ArcTech™ 機能挖背訓練背心 (酒紅)',q:1,p:690},{d:'2026-03-27',t:'ArcTech™ 機能挖背訓練背心 (淺灰)',q:1,p:690},
+  {d:'2026-03-27',t:'ArcTech™ 機能寬肩訓練背心 (黑)',q:1,p:750},{d:'2026-03-27',t:'ArcTech™ 機能寬肩訓練背心 (棕粉)',q:1,p:750},
+  {d:'2026-03-27',t:'ArcTech™ 機能訓練上衣 (黑)',q:1,p:790},
+  {d:'2026-03-27',t:'ArcTech™ Essential 剪接弧襬背心 (黑)',q:1,p:790},{d:'2026-03-27',t:'ArcTech™ Essential 剪接弧襬背心 (深藍)',q:1,p:790},
+  {d:'2026-03-27',t:'ArcTech™ Essential 寬肩剪接背心 (黑)',q:2,p:790},
+  {d:'2026-03-27',t:'ArcTech™ AROAK 文字機能寬肩背心 (白)',q:1,p:890},
+  {d:'2026-03-27',t:'ArcTech™ AROAK CREW 機能背心 (鐵灰)',q:2,p:890},{d:'2026-03-27',t:'ArcTech™ AROAK CREW 機能背心 (白)',q:1,p:890},
+  {d:'2026-03-27',t:'ArcTech™ Elite剪接挖背訓練背心 (黑)',q:1,p:890},{d:'2026-03-27',t:'ArcTech™ Elite剪接挖背訓練背心 (白)',q:1,p:890},{d:'2026-03-27',t:'ArcTech™ Elite剪接挖背訓練背心 (淺灰)',q:1,p:890},
+  {d:'2026-03-27',t:'ArcTech™ Elite 細肩挖背訓練背心 (深藍)',q:1,p:850},
+  {d:'2026-03-27',t:'ArcTech™ Elite剪接訓練上衣 (黑)',q:1,p:950},{d:'2026-03-27',t:'ArcTech™ Elite剪接訓練上衣 (白)',q:2,p:950},
+  {d:'2026-03-27',t:'ArcTech™ 堅毅戰士寬版拉克蘭袖上衣 (淺灰)',q:1,p:980},{d:'2026-03-27',t:'NAP™-Twist 極致觸感流線動能上衣 (麻花黑)',q:1,p:980},
+  {d:'2026-03-27',t:'TENCEL™-SGL 獅王覺醒短袖上衣 (白)',q:1,p:1180},{d:'2026-03-27',t:'ArcTech™ 機能立體剪裁長褲 (深藍)',q:1,p:1180},
+  {d:'2026-03-27',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑)',q:2,p:1180},{d:'2026-03-27',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (白)',q:1,p:1180},{d:'2026-03-27',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (橄欖灰)',q:1,p:1180},{d:'2026-03-27',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑綠)',q:1,p:1180},{d:'2026-03-27',t:'AirSculpt™ OVERSIZED 短袖上衣 (黑)',q:1,p:1180},
+  {d:'2026-03-27',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (鐵灰)',q:3,p:1180},{d:'2026-03-27',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (米白)',q:2,p:1180},{d:'2026-03-27',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (黑)',q:1,p:1180},
+  {d:'2026-03-27',t:'AirFlex™ 機能基礎訓練長褲 (鐵灰)',q:1,p:1180},{d:'2026-03-27',t:'AirFlex™ 機能基礎訓練長褲 (丈青)',q:1,p:1180},
+  {d:'2026-03-27',t:'AirFlex™ OVERSIZED 短袖上衣 (經典黑)',q:2,p:1080},{d:'2026-03-27',t:'AirFlex™ OVERSIZED 短袖上衣 (丈青)',q:1,p:1080},
+  {d:'2026-03-27',t:'ArcTech™ 機能開岔訓練短褲 (鐵灰)',q:2,p:1080},{d:'2026-03-27',t:'AirFlex™ 機能開岔訓練短褲 (丈青)',q:1,p:1080},{d:'2026-03-27',t:'弧型拼接機能短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-27',t:'AirFlex™ 磁釦翻蓋口袋訓練短褲 (黑)',q:1,p:1580},
+  {d:'2026-03-27',t:'立體 LOGO 休閒短褲 (黑)',q:2,p:1280},{d:'2026-03-27',t:'立體 LOGO 休閒短褲 (水泥灰)',q:1,p:1280},
+  {d:'2026-03-27',t:'AirFlex™ AROAK OVERSIZED 後袖剪接訓練上衣 (黑)',q:1,p:1280},{d:'2026-03-27',t:'AirFlex™ AROAK OVERSIZED 後袖剪接訓練上衣 (鐵灰)',q:1,p:1280},{d:'2026-03-27',t:'AirFlex™ AROAK OVERSIZED 後袖剪接訓練上衣 (丈青)',q:1,p:1280},
+  {d:'2026-03-27',t:'AirFlex™ 機能剪接運動短褲 (丈青)',q:1,p:1280},{d:'2026-03-27',t:'AirSculpt™ 休閒印花短褲 (黑)',q:1,p:1280},{d:'2026-03-27',t:'AirSculpt™ 美式復古短褲 (黑)',q:1,p:1480},
+  {d:'2026-03-27',t:'AirFlex™ 拉鍊貼袋訓練短褲 (丈青)',q:2,p:1480},{d:'2026-03-27',t:'AirFlex™ 拉鍊貼袋訓練短褲 (酒紅)',q:2,p:1480},{d:'2026-03-27',t:'AirFlex™ 極限之巔訓練短褲 (果綠)',q:1,p:1480},
+  {d:'2026-03-27',t:'LightDry™ 輕盈機能疾速短褲 (犀牛灰)',q:4,p:1380},{d:'2026-03-27',t:'LightDry™ 輕盈機能疾速短褲 (湖藍)',q:1,p:1380},
+  {d:'2026-03-27',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (白)',q:2,p:1380},
+  {d:'2026-03-27',t:'哥吉拉盲盒 (盲盒)',q:1,p:2280},{d:'2026-03-27',t:'哥吉拉經典機能寛肩背心 (黑)',q:1,p:1280},
+  {d:'2026-03-27',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:2,p:390},{d:'2026-03-27',t:'哥吉拉 - 王者基多拉襪子 (黑)',q:2,p:390},
+  {d:'2026-03-27',t:'SIRO™-Shield 爆裂紋七分短褲 (水泥灰)',q:1,p:1790},
+  {d:'2026-03-27',t:'FluxFit™ 寬肩剪接短版背心 25-2 (荳寇棕)',q:1,p:680},{d:'2026-03-27',t:'FluxFit™ 寬肩剪接短版背心 25-2 (斜紋藍)',q:1,p:680},{d:'2026-03-27',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (荳寇棕)',q:1,p:790},
+  {d:'2026-03-27',t:'TENCEL™-SGL 星耀落肩背心 (黑)',q:1,p:980},{d:'2026-03-27',t:'Airy™ 輕量機能短袖上衣 25-1 (黑)',q:1,p:880},
+  {d:'2026-03-27',t:'AirFlex™ 女款機能訓練長褲 24-1 (黑)',q:1,p:1180},
+  // 3/28
+  {d:'2026-03-28',t:'哥吉拉盲盒 (盲盒)',q:6,p:2280},{d:'2026-03-28',t:'哥吉拉不朽王者機能短袖上衣 (黑)',q:5,p:1480},{d:'2026-03-28',t:'哥吉拉經典機能寛肩背心 (黑)',q:4,p:1280},
+  {d:'2026-03-28',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:3,p:390},{d:'2026-03-28',t:'哥吉拉 - 王者基多拉襪子 (黑)',q:4,p:390},{d:'2026-03-28',t:'哥吉拉毛巾掛勾吊飾 (全彩)',q:1,p:390},
+  {d:'2026-03-28',t:'哥吉拉爭霸之戰機能背心 (白)',q:2,p:980},
+  {d:'2026-03-28',t:'ArcTech™ 機能訓練上衣 (黑)',q:4,p:790},{d:'2026-03-28',t:'ArcTech™ 機能訓練上衣 (鐵灰)',q:3,p:790},{d:'2026-03-28',t:'ArcTech™ 機能訓練上衣 (淺灰)',q:1,p:790},{d:'2026-03-28',t:'ArcTech™ 機能訓練上衣 (深藍)',q:1,p:790},
+  {d:'2026-03-28',t:'ArcTech™ 機能拉克蘭短袖上衣 (白)',q:2,p:790},{d:'2026-03-28',t:'ArcTech™ 機能拉克蘭短袖上衣 (深藍)',q:1,p:790},{d:'2026-03-28',t:'ArcTech™ 機能拉克蘭短袖上衣 (鐵灰)',q:1,p:790},
+  {d:'2026-03-28',t:'ArcTech™ 機能細肩挖背訓練背心 (黑)',q:2,p:690},{d:'2026-03-28',t:'ArcTech™ 機能細肩挖背訓練背心 (深藍)',q:1,p:690},{d:'2026-03-28',t:'ArcTech™ 機能細肩挖背訓練背心 (白)',q:1,p:690},
+  {d:'2026-03-28',t:'ArcTech™ 機能挖背訓練背心 (黑)',q:2,p:690},{d:'2026-03-28',t:'ArcTech™ 機能挖背訓練背心 (酒紅)',q:2,p:690},{d:'2026-03-28',t:'ArcTech™ 機能挖背訓練背心 (白)',q:1,p:690},
+  {d:'2026-03-28',t:'ArcTech™ 機能圓弧健身背心 (白)',q:1,p:690},{d:'2026-03-28',t:'ArcTech™ 機能圓弧健身背心 (深藍)',q:1,p:690},
+  {d:'2026-03-28',t:'ArcTech™ 機能寬肩訓練背心 (黑)',q:1,p:750},{d:'2026-03-28',t:'ArcTech™ 機能寬肩訓練背心 (深藍)',q:1,p:750},
+  {d:'2026-03-28',t:'ArcTech™ 機能訓練寬鬆落肩短版上衣25-2 (深藍)',q:2,p:690},{d:'2026-03-28',t:'ArcTech™ 機能訓練寬鬆落肩短版上衣25-2 (白)',q:1,p:690},
+  {d:'2026-03-28',t:'ArcTech™ Essential 剪接弧襬背心 (深藍)',q:1,p:790},{d:'2026-03-28',t:'ArcTech™ Essential 剪接弧襬背心 (白)',q:2,p:790},
+  {d:'2026-03-28',t:'ArcTech™ Essential Oversized Fit 短袖上衣 (黑)',q:1,p:890},{d:'2026-03-28',t:'ArcTech™ Essential Oversized Fit 短袖上衣 (鐵灰)',q:1,p:890},
+  {d:'2026-03-28',t:'ArcTech™ AROAK CREW 機能背心 (酒紅)',q:1,p:890},{d:'2026-03-28',t:'ArcTech™ AROAK CREW 機能背心 (黑)',q:1,p:890},
+  {d:'2026-03-28',t:'ArcTech™ AROAK 文字機能寬肩背心 (淺灰)',q:1,p:890},
+  {d:'2026-03-28',t:'ArcTech™ Elite剪接挖背訓練背心 (黑)',q:1,p:890},{d:'2026-03-28',t:'ArcTech™ Elite剪接挖背訓練背心 (淺灰)',q:4,p:890},{d:'2026-03-28',t:'ArcTech™ Elite 側挖剪接訓練背心 (白)',q:1,p:890},{d:'2026-03-28',t:'FluxFit™ 側開衩休閒背心 (黑)',q:1,p:890},
+  {d:'2026-03-28',t:'ArcTech™ Elite剪接訓練上衣 (黑)',q:3,p:950},{d:'2026-03-28',t:'ArcTech™ Elite剪接訓練上衣 (白)',q:1,p:950},{d:'2026-03-28',t:'ArcTech™ Elite剪接訓練上衣 (淺灰)',q:2,p:950},
+  {d:'2026-03-28',t:'ArcTech™ Elite寬肩剪接訓練背心 (黑)',q:2,p:950},{d:'2026-03-28',t:'ArcTech™ Elite寬肩剪接訓練背心 (白)',q:1,p:950},
+  {d:'2026-03-28',t:'FlexSmooth™ 剪接尼龍訓練背心 (黑)',q:1,p:980},{d:'2026-03-28',t:'FlexSmooth™ 剪接尼龍訓練背心 (丈青)',q:1,p:980},
+  {d:'2026-03-28',t:'FlexSmooth™ 寬肩拉克蘭袖機能尼龍背心 (黑)',q:1,p:950},{d:'2026-03-28',t:'FlexSmooth™ 寬肩拉克蘭袖機能尼龍背心 (淺灰)',q:2,p:950},{d:'2026-03-28',t:'FlexSmooth™ 寬肩拉克蘭袖機能尼龍背心 (丈青)',q:2,p:950},
+  {d:'2026-03-28',t:'FluxFit™ 腋下拼接訓練上衣 (黑)',q:1,p:980},{d:'2026-03-28',t:'FluxFit™ 腋下拼接訓練上衣 (荳寇棕)',q:1,p:980},
+  {d:'2026-03-28',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (黑)',q:2,p:980},{d:'2026-03-28',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (斜紋藍)',q:1,p:980},{d:'2026-03-28',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (杉木棕)',q:1,p:980},
+  {d:'2026-03-28',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (黑)',q:1,p:790},{d:'2026-03-28',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (杉木棕)',q:1,p:790},{d:'2026-03-28',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (斜紋藍)',q:1,p:790},
+  {d:'2026-03-28',t:'NAP™-Twist 極致觸感流線動能上衣 (麻花黑)',q:1,p:980},
+  {d:'2026-03-28',t:'TENCEL™-SGL 獅王覺醒短袖上衣 (黑)',q:1,p:1180},{d:'2026-03-28',t:'TENCEL™-SGL 獅王覺醒短袖上衣 (白)',q:1,p:1180},
+  {d:'2026-03-28',t:'TENCEL™-SGL 戰獅之魂背心 (深藍)',q:1,p:980},{d:'2026-03-28',t:'TENCEL™-SGL 戰獅之魂背心 (白)',q:1,p:980},
+  {d:'2026-03-28',t:'TENCEL™-SGL 王者試煉拉克蘭袖上衣 (白)',q:1,p:1180},
+  {d:'2026-03-28',t:'AirFlex™ 磁釦機能口袋訓練長褲 (黑)',q:4,p:1680},
+  {d:'2026-03-28',t:'AirFlex™ 機能基礎訓練長褲 (淺灰)',q:1,p:1180},{d:'2026-03-28',t:'AirFlex™ 機能基礎訓練長褲 (丈青)',q:1,p:1180},{d:'2026-03-28',t:'AirFlex™ 機能基礎訓練長褲 (黑)',q:1,p:1180},
+  {d:'2026-03-28',t:'ArcTech™ 機能拉鍊口袋長褲 (鐵灰)',q:1,p:1480},
+  {d:'2026-03-28',t:'AirSculpt™ 印花機能長褲 (黑)',q:1,p:1580},{d:'2026-03-28',t:'AirSculpt™ 印花機能長褲 (白)',q:1,p:1580},
+  {d:'2026-03-28',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:1,p:1080},{d:'2026-03-28',t:'AirFlex™ 機能開岔訓練短褲 (鐵灰)',q:1,p:1080},{d:'2026-03-28',t:'AirFlex™ 機能開岔訓練短褲 (丈青)',q:2,p:1080},{d:'2026-03-28',t:'AirFlex™ 機能開岔訓練短褲 (淺灰)',q:1,p:1080},
+  {d:'2026-03-28',t:'ArcTech™ 機能開岔訓練短褲 (深藍)',q:3,p:1080},{d:'2026-03-28',t:'ArcTech™ 機能開岔訓練短褲 (鐵灰)',q:2,p:1080},
+  {d:'2026-03-28',t:'AirFlex™ 拉鍊貼袋訓練短褲 (黑)',q:1,p:1480},{d:'2026-03-28',t:'AirSculpt™ 美式復古短褲 (白)',q:1,p:1480},{d:'2026-03-28',t:'AirSculpt™ 休閒印花短褲 (黑)',q:1,p:1280},
+  {d:'2026-03-28',t:'立體 LOGO 休閒短褲 (深藍)',q:1,p:1280},{d:'2026-03-28',t:'立體 LOGO 寬版休閒短袖上衣 (黑)',q:1,p:1180},{d:'2026-03-28',t:'立體 LOGO 寬版休閒短袖上衣 (深藍)',q:1,p:1180},{d:'2026-03-28',t:'立體 LOGO 寬版休閒短袖上衣 (水泥灰)',q:1,p:1180},
+  {d:'2026-03-28',t:'弧型拼接機能短褲 (黑)',q:1,p:1080},
+  {d:'2026-03-28',t:'LightDry™ 輕盈機能開襟襯衫 (犀牛灰)',q:2,p:1880},{d:'2026-03-28',t:'LightDry™ 輕盈機能疾速短褲 (犀牛灰)',q:2,p:1380},
+  {d:'2026-03-28',t:'AirFlex™ COLOR FLOW 戰士寬版拉克蘭袖上衣 (黑)',q:1,p:1380},
+  {d:'2026-03-28',t:'AirFlex™ OVERSIZED 短袖上衣 (丈青)',q:4,p:1080},{d:'2026-03-28',t:'AirFlex™ OVERSIZED 短袖上衣 (淺灰)',q:1,p:1080},{d:'2026-03-28',t:'AirFlex™ OVERSIZED 短袖上衣 (經典黑)',q:1,p:1080},
+  {d:'2026-03-28',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (淺灰)',q:1,p:1080},{d:'2026-03-28',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (經典黑)',q:1,p:1080},
+  {d:'2026-03-28',t:'AirFlex™ 戰士的怒吼 OVERSIZED 短袖上衣 (丈青)',q:1,p:1180},{d:'2026-03-28',t:'AirFlex™ 對決 OVERSIZED 拉克蘭袖上衣 (鐵灰)',q:1,p:1280},
+  {d:'2026-03-28',t:'AirFlex™ OVERSIZED 無畏之力拉克蘭袖上衣 (白)',q:1,p:1480},{d:'2026-03-28',t:'AirFlex™ OVERSIZED 乙巳蛇年短袖上衣 (黑)',q:1,p:1280},
+  {d:'2026-03-28',t:'AirFlex™ 連帽寬肩背心 (白)',q:1,p:1180},{d:'2026-03-28',t:'AirFlex™ 連帽寬肩背心 (淺灰)',q:1,p:1180},
+  {d:'2026-03-28',t:'AirFlex™ 窄肩訓練背心 (鐵灰)',q:1,p:980},{d:'2026-03-28',t:'AirFlex™ 窄肩訓練背心 (丈青)',q:1,p:980},
+  {d:'2026-03-28',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (白)',q:1,p:1380},{d:'2026-03-28',t:'AirSculpt™ OVERSIZED 短袖上衣 (橄欖灰)',q:1,p:1180},{d:'2026-03-28',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑)',q:1,p:1180},
+  {d:'2026-03-28',t:'Doux™ 裸感收腹翹臀瑜珈褲 (黑)',q:1,p:1180},{d:'2026-03-28',t:'Doux™ 裸感曲線3分瑜珈褲 (黑)',q:2,p:1080},
+  {d:'2026-03-28',t:'Doux™ 裸感高腰纖瘦喇叭瑜珈褲 (黑)',q:3,p:1280},{d:'2026-03-28',t:'Doux™ 律動交織 Bra Top (黑)',q:1,p:1480},{d:'2026-03-28',t:'Doux™ 深V交叉裸背 Bra Top (黑)',q:1,p:1580},{d:'2026-03-28',t:'Doux™ 聚焦調節運動內衣 (藍紫)',q:1,p:1080},
+  {d:'2026-03-28',t:'Lumin™ 肌能坑條V領交叉運動背心 (黑)',q:1,p:1380},{d:'2026-03-28',t:'Lumin™ U領後挖背 Bra Top',q:1,p:1780},{d:'2026-03-28',t:'Lumin™ Xross 鬆緊美背 Bra Top (奶茶杏)',q:1,p:1680},
+  {d:'2026-03-28',t:'Airy™ 輕量機能疾速短袖上衣 (黑)',q:1,p:950},
+  {d:'2026-03-28',t:'AROAK 全分離乳清 (優格多多風味) (單包裝)',q:4,p:55},{d:'2026-03-28',t:'AROAK 全分離乳清 (抹茶那堤風味) (單包裝)',q:4,p:55},
+  {d:'2026-03-28',t:'AROAK 全分離乳清 (焦糖海鹽風味) (單包裝)',q:1,p:55},{d:'2026-03-28',t:'AROAK 全分離乳清 (草莓風味) (單包裝)',q:4,p:55},{d:'2026-03-28',t:'AROAK 全分離乳清 (生巧克力風味) (單包裝)',q:3,p:55},
+  // 3/29
+  {d:'2026-03-29',t:'哥吉拉經典機能寛肩背心 (黑)',q:6,p:1280},{d:'2026-03-29',t:'哥吉拉盲盒 (盲盒)',q:2,p:2280},{d:'2026-03-29',t:'哥吉拉不朽王者機能短袖上衣 (黑)',q:1,p:1480},{d:'2026-03-29',t:'哥吉拉爭霸之戰機能背心 (白)',q:1,p:980},
+  {d:'2026-03-29',t:'哥吉拉 - 機械哥吉拉襪子 (白)',q:1,p:390},{d:'2026-03-29',t:'哥吉拉 - 王者基多拉襪子 (黑)',q:2,p:390},
+  {d:'2026-03-29',t:'AirFlex™ 立領運動夾克 (丈青)',q:1,p:1680},{d:'2026-03-29',t:'AirFlex™ 立領運動夾克 (黑)',q:3,p:1680},
+  {d:'2026-03-29',t:'AirFlex™ 磁釦機能口袋訓練長褲 (鐵灰)',q:2,p:1680},
+  {d:'2026-03-29',t:'AirFlex™ 落肩剪接機能訓練背心 (黑)',q:3,p:1050},{d:'2026-03-29',t:'AirFlex™ 落肩剪接機能訓練背心 (鐵灰)',q:1,p:1050},
+  {d:'2026-03-29',t:'TENCEL™-RIB 圓領羅紋短袖上衣 (白)',q:4,p:1380},{d:'2026-03-29',t:'TENCEL™-RIB 圓領羅紋短袖上衣 (深卡其)',q:1,p:1380},
+  {d:'2026-03-29',t:'AirSculpt™ 印花機能長褲 (黑)',q:5,p:1580},
+  {d:'2026-03-29',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑)',q:1,p:1180},{d:'2026-03-29',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (橄欖灰)',q:3,p:1180},{d:'2026-03-29',t:'AirSculpt™ OVERSIZED 拉克蘭袖上衣 (黑綠)',q:2,p:1180},
+  {d:'2026-03-29',t:'AirSculpt™ OVERSIZED 短袖上衣 (黑)',q:2,p:1180},{d:'2026-03-29',t:'AirSculpt™ OVERSIZED 短袖上衣 (白)',q:1,p:1180},{d:'2026-03-29',t:'AirSculpt™ OVERSIZED 短袖上衣 (橄欖灰)',q:2,p:1180},
+  {d:'2026-03-29',t:'AirSculpt™ 休閒印花短褲 (黑)',q:3,p:1280},{d:'2026-03-29',t:'AirSculpt™ 休閒印花短褲 (白)',q:1,p:1280},{d:'2026-03-29',t:'AirSculpt™ 休閒印花短褲 (橄欖灰)',q:1,p:1280},
+  {d:'2026-03-29',t:'AirSculpt™ 美式復古短褲 (黑)',q:2,p:1480},{d:'2026-03-29',t:'AirSculpt™ 美式復古短褲 (白)',q:1,p:1480},{d:'2026-03-29',t:'AirSculpt™ 硬派榮耀拉克蘭袖上衣 (橄欖灰)',q:1,p:1380},
+  {d:'2026-03-29',t:'AirFlex™ OVERSIZED 戰神之巔拉克蘭袖上衣 (黑)',q:3,p:1380},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 戰神之巔拉克蘭袖上衣 (白)',q:1,p:1380},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 戰神之巔拉克蘭袖上衣 (淺灰)',q:2,p:1380},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 戰神之巔拉克蘭袖上衣 (卡其)',q:2,p:1380},
+  {d:'2026-03-29',t:'AirFlex™ COLOR FLOW 戰士寬版拉克蘭袖上衣 (米白)',q:1,p:1380},
+  {d:'2026-03-29',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (白)',q:1,p:1180},{d:'2026-03-29',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (米白)',q:3,p:1180},{d:'2026-03-29',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (丈青)',q:1,p:1180},{d:'2026-03-29',t:'AirFlex™ 列奧尼達 OVERSIZED 機能短袖訓練上衣 (黑)',q:1,p:1180},
+  {d:'2026-03-29',t:'AirFlex™ OVERSIZED 王者爭霸短袖上衣 (墨綠)',q:2,p:1280},{d:'2026-03-29',t:'AirFlex™ 戰士的怒吼 OVERSIZED 短袖上衣 (鐵灰)',q:1,p:1180},
+  {d:'2026-03-29',t:'AirFlex™ OVERSIZED 短袖上衣 (鐵灰)',q:2,p:1080},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 短袖上衣 (經典黑)',q:1,p:1080},
+  {d:'2026-03-29',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (丈青)',q:1,p:1080},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (鐵灰)',q:1,p:1080},{d:'2026-03-29',t:'AirFlex™ OVERSIZED 拉克蘭袖上衣 (白)',q:1,p:1080},
+  {d:'2026-03-29',t:'AirFlex™ 連帽寬肩背心 (淺灰)',q:1,p:1180},
+  {d:'2026-03-29',t:'AirFlex™ 機能基礎訓練長褲 (黑)',q:1,p:1180},{d:'2026-03-29',t:'AirFlex™ 機能基礎訓練長褲 (鐵灰)',q:2,p:1180},{d:'2026-03-29',t:'AirFlex™ 機能基礎訓練長褲 (丈青)',q:3,p:1180},
+  {d:'2026-03-29',t:'AirFlex™ 機能開岔訓練短褲 (黑)',q:2,p:1080},{d:'2026-03-29',t:'AirFlex™ 機能開岔訓練短褲 (淺灰)',q:1,p:1080},
+  {d:'2026-03-29',t:'AirFlex™ 磁釦翻蓋口袋訓練短褲 (丈青)',q:1,p:1580},
+  {d:'2026-03-29',t:'AirFlex™ 拉鍊貼袋訓練短褲 (黑)',q:3,p:1480},{d:'2026-03-29',t:'AirFlex™ 拉鍊貼袋訓練短褲 (酒紅)',q:1,p:1480},
+  {d:'2026-03-29',t:'AirFlex™ 窄肩訓練背心 (黑)',q:1,p:980},{d:'2026-03-29',t:'AirFlex™ 窄肩訓練背心 (白)',q:1,p:980},{d:'2026-03-29',t:'AirFlex™ 窄肩訓練背心 (丈青)',q:1,p:980},
+  {d:'2026-03-29',t:'AirFlex™ 疾速機能九分褲 (淺灰)',q:1,p:1880},{d:'2026-03-29',t:'LightDry™ 輕盈機能開襟襯衫 (黑)',q:1,p:1880},{d:'2026-03-29',t:'LightDry™ 輕盈機能休閒寬褲 (黑)',q:1,p:1980},{d:'2026-03-29',t:'LightDry™ 輕盈機能疾速短褲 (犀牛灰)',q:2,p:1380},
+  {d:'2026-03-29',t:'ArcTech™ 機能訓練上衣 (黑)',q:3,p:790},{d:'2026-03-29',t:'ArcTech™ 機能訓練上衣 (白)',q:1,p:790},{d:'2026-03-29',t:'ArcTech™ 機能訓練上衣 (淺灰)',q:4,p:790},{d:'2026-03-29',t:'ArcTech™ 機能訓練上衣 (深藍)',q:3,p:790},{d:'2026-03-29',t:'ArcTech™ 機能訓練上衣 (鐵灰)',q:1,p:790},
+  {d:'2026-03-29',t:'ArcTech™ 機能拉克蘭短袖上衣 (酒紅)',q:1,p:790},
+  {d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (黑)',q:1,p:750},{d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (白)',q:2,p:750},{d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (淺灰)',q:2,p:750},{d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (淺灰綠)',q:2,p:750},{d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (酒紅)',q:2,p:750},{d:'2026-03-29',t:'ArcTech™ 機能寬肩訓練背心 (鐵灰)',q:1,p:750},
+  {d:'2026-03-29',t:'ArcTech™ 機能圓弧健身背心 (白)',q:3,p:690},{d:'2026-03-29',t:'ArcTech™ 機能圓弧健身背心 (淺灰)',q:2,p:690},{d:'2026-03-29',t:'ArcTech™ 機能圓弧健身背心 (深藍)',q:1,p:690},{d:'2026-03-29',t:'ArcTech™ 機能圓弧健身背心 (菸灰藍)',q:1,p:690},
+  {d:'2026-03-29',t:'ArcTech™ 機能挖背訓練背心 (淺灰)',q:1,p:690},{d:'2026-03-29',t:'ArcTech™ 機能挖背訓練背心 (酒紅)',q:1,p:690},{d:'2026-03-29',t:'ArcTech™ 機能挖背訓練背心 (藍綠)',q:1,p:690},
+  {d:'2026-03-29',t:'ArcTech™ 機能細肩挖背訓練背心 (白)',q:1,p:690},{d:'2026-03-29',t:'ArcTech™ 機能細肩挖背訓練背心 (鐵灰)',q:1,p:690},
+  {d:'2026-03-29',t:'ArcTech™ Essential 剪接弧襬背心 (黑)',q:2,p:790},{d:'2026-03-29',t:'ArcTech™ Essential 剪接弧襬背心 (白)',q:3,p:790},
+  {d:'2026-03-29',t:'ArcTech™ Essential 寬肩剪接背心 (白)',q:2,p:790},{d:'2026-03-29',t:'ArcTech™ Essential 寬肩剪接背心 (黑)',q:1,p:790},{d:'2026-03-29',t:'ArcTech™ Essential 寬肩剪接背心 (淺灰)',q:1,p:790},
+  {d:'2026-03-29',t:'ArcTech™ Essential Oversized Fit 短袖上衣 (鐵灰)',q:2,p:890},
+  {d:'2026-03-29',t:'ArcTech™ AROAK 文字機能寬肩背心 (黑)',q:3,p:890},{d:'2026-03-29',t:'ArcTech™ AROAK 文字機能寬肩背心 (深藍)',q:2,p:890},
+  {d:'2026-03-29',t:'ArcTech™ AROAK CREW 機能背心 (黑)',q:2,p:890},{d:'2026-03-29',t:'ArcTech™ AROAK CREW 機能背心 (鐵灰)',q:1,p:890},
+  {d:'2026-03-29',t:'ArcTech™ Elite剪接訓練上衣 (黑)',q:2,p:950},{d:'2026-03-29',t:'ArcTech™ Elite剪接訓練上衣 (白)',q:3,p:950},{d:'2026-03-29',t:'ArcTech™ Elite剪接訓練上衣 (淺灰)',q:1,p:950},
+  {d:'2026-03-29',t:'ArcTech™ Elite剪接挖背訓練背心 (黑)',q:1,p:890},{d:'2026-03-29',t:'ArcTech™ Elite剪接挖背訓練背心 (白)',q:1,p:890},{d:'2026-03-29',t:'ArcTech™ Elite剪接挖背訓練背心 (淺灰)',q:2,p:890},
+  {d:'2026-03-29',t:'ArcTech™ Elite 細肩挖背訓練背心 (白)',q:2,p:850},{d:'2026-03-29',t:'ArcTech™ Elite 細肩挖背訓練背心 (黑)',q:3,p:850},
+  {d:'2026-03-29',t:'ArcTech™ Elite 側挖剪接訓練背心 (白)',q:2,p:890},{d:'2026-03-29',t:'ArcTech™ Elite寬肩剪接訓練背心 (鐵灰)',q:1,p:950},
+  {d:'2026-03-29',t:'ArcTech™ OVERSIZED 文字印花機能上衣 (黑)',q:1,p:980},
+  {d:'2026-03-29',t:'ArcTech™ 機能開岔訓練短褲 (黑)',q:1,p:1080},{d:'2026-03-29',t:'ArcTech™ 機能開岔訓練短褲 (鐵灰)',q:3,p:1080},{d:'2026-03-29',t:'ArcTech™ 機能開岔訓練短褲 (深藍)',q:3,p:1080},
+  {d:'2026-03-29',t:'ArcTech™ 極簡動能長褲 (黑)',q:2,p:1380},
+  {d:'2026-03-29',t:'FluxFit™ 腋下拼接訓練上衣 (黑)',q:1,p:980},{d:'2026-03-29',t:'FluxFit™ 腋下拼接訓練上衣 (荳寇棕)',q:1,p:980},{d:'2026-03-29',t:'FluxFit™ 腋下拼接訓練上衣 (斜紋藍)',q:3,p:980},
+  {d:'2026-03-29',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (白)',q:1,p:980},{d:'2026-03-29',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (英雄藍)',q:1,p:980},{d:'2026-03-29',t:'FluxFit™ OVERSIZED 機能短袖訓練上衣 (杉木棕)',q:1,p:980},
+  {d:'2026-03-29',t:'FluxFit™ 側開衩休閒背心 (黑)',q:3,p:890},{d:'2026-03-29',t:'FluxFit™ 側開衩休閒背心 (英雄藍)',q:1,p:890},{d:'2026-03-29',t:'FluxFit™ 側開衩休閒背心 (日蝕灰)',q:1,p:890},
+  {d:'2026-03-29',t:'FluxFit™ 寬肩剪接短版背心 25-2 (黑)',q:1,p:680},{d:'2026-03-29',t:'FluxFit™ 寬肩剪接短版背心 25-2 (荳寇棕)',q:1,p:680},{d:'2026-03-29',t:'FluxFit™ 拉克蘭袖剪接短版上衣 25-2 (斜紋藍)',q:1,p:790},
+  {d:'2026-03-29',t:'FlexSmooth™ 剪接尼龍訓練背心 (黑)',q:1,p:980},
+  {d:'2026-03-29',t:'TENCEL™-SGL 星耀落肩背心 (水泥灰)',q:3,p:980},{d:'2026-03-29',t:'TENCEL™-SGL 戰獅之魂背心 (白)',q:2,p:980},{d:'2026-03-29',t:'TENCEL™-SGL 獅王覺醒短袖上衣 (深藍)',q:2,p:1180},
+  {d:'2026-03-29',t:'NAP™-Pure 親膚機能合身拉克蘭袖上衣 (灰藍)',q:1,p:980},{d:'2026-03-29',t:'NAP™-Pure 親膚機能合身拉克蘭袖上衣 (淺灰)',q:1,p:980},
+  {d:'2026-03-29',t:'Airy™ 輕量機能短袖上衣 25-1 (黑)',q:1,p:880},{d:'2026-03-29',t:'Airy™ 輕量機能短袖上衣 25-1 (犀牛灰)',q:1,p:880},
+  {d:'2026-03-29',t:'Airy™ 輕量機能疾速短袖上衣 (黑)',q:2,p:950},{d:'2026-03-29',t:'Airy™ 輕量機能疾速短袖上衣 (湖藍)',q:1,p:950},
+  {d:'2026-03-29',t:'Wafflux™ 雲感彈力肌感 Bra Top (黑)',q:2,p:1380},{d:'2026-03-29',t:'Wafflux™ 雲感縮口長褲 (黑)',q:1,p:1580},
+  {d:'2026-03-29',t:'Doux™ 裸感曲線3分瑜珈褲 (黑)',q:2,p:1080},{d:'2026-03-29',t:'Doux™ 裸感曲線3分瑜珈褲 (深藍)',q:1,p:1080},
+  {d:'2026-03-29',t:'Doux™ 裸感高腰纖瘦喇叭瑜珈褲 (煙燻粉)',q:1,p:1280},
+  {d:'2026-03-29',t:'Doux™ 聚焦調節運動內衣 (淺灰)',q:1,p:1080},{d:'2026-03-29',t:'Doux™ 聚焦調節運動內衣 (煙燻粉)',q:2,p:1080},{d:'2026-03-29',t:'Doux™ 聚焦調節運動內衣 (藍紫)',q:1,p:1080},
+  {d:'2026-03-29',t:'Doux™ Xross 後背扣 Bra Top (煙燻粉)',q:1,p:1580},
+  {d:'2026-03-29',t:'Lumin™ 肌能坑條蝴蝶背運動背心 (白)',q:1,p:1280},{d:'2026-03-29',t:'Curvy™-RIB 繞頸集中美胸 Bra Top (黑)',q:1,p:1080},{d:'2026-03-29',t:'Curvy™-RIB 前開衩喇叭休閒長褲 (黑)',q:1,p:1280},
+  {d:'2026-03-29',t:'AROAK 耐磨皮革拉力帶 (黑) (一組2入)',q:6,p:1280},{d:'2026-03-29',t:'AROAK 半截式訓練手套 (黑) (一組2入)',q:2,p:490},{d:'2026-03-29',t:'AROAK 重磅彈力護腕 (黑紅) (一組2入)',q:1,p:790},
+  {d:'2026-03-29',t:'AROAK 黑標五分帽 (淺灰)',q:1,p:580},{d:'2026-03-29',t:'經典 LOGO 電繡老帽 (卡其)',q:1,p:580},{d:'2026-03-29',t:'經典 LOGO 電繡老帽 (黑)',q:1,p:580},
+  {d:'2026-03-29',t:'弧型拼接機能短褲 (黑)',q:1,p:1080},{d:'2026-03-29',t:'立體 LOGO 寬版休閒短袖上衣 (白)',q:1,p:1180},
+];
+
+
+// 訂單來源資料 3/25–3/29（線上訂單，已排除門市）
+const ORDER_SRC = [
+  // 3/25 online
+  {d:'2026-03-25',n:'#34448',src:'direct',amt:1870},
+  {d:'2026-03-25',n:'#34449',src:'direct',amt:3640},
+  {d:'2026-03-25',n:'#34450',src:'Instagram/CPC',amt:5900},
+  {d:'2026-03-25',n:'#34451',src:'Instagram/Home',amt:1180},
+  {d:'2026-03-25',n:'#34452',src:'direct',amt:2156.5},
+  {d:'2026-03-25',n:'#34453',src:'direct',amt:1870},
+  {d:'2026-03-25',n:'#34454',src:'Meta/CPC',amt:646},
+  {d:'2026-03-25',n:'#34455',src:'Instagram/Home',amt:1596},
+  {d:'2026-03-25',n:'#34456',src:'direct',amt:1680},
+  {d:'2026-03-25',n:'#34457',src:'Shopify',amt:1180},
+  {d:'2026-03-25',n:'#34458',src:'LINE/RichMenu',amt:690},
+  {d:'2026-03-25',n:'#34459',src:'AKO Hub',amt:1216},
+  {d:'2026-03-25',n:'#34460',src:'unknown',amt:2179},
+  {d:'2026-03-25',n:'#34461',src:'Google/App',amt:2536.5},
+  {d:'2026-03-25',n:'#34464',src:'AKO Hub',amt:3260},
+  {d:'2026-03-25',n:'#34256',src:'AKO Hub',amt:1640},
+  {d:'2026-03-25',n:'#34479',src:'Google',amt:8165},
+  {d:'2026-03-25',n:'#34480',src:'Facebook/Paid',amt:0},
+  {d:'2026-03-25',n:'#34481',src:'Bing',amt:2130},
+  {d:'2026-03-25',n:'#34483',src:'Facebook/CPC',amt:2660},
+  {d:'2026-03-25',n:'#34484',src:'direct',amt:2810},
+  {d:'2026-03-25',n:'#34487',src:'direct',amt:2730},
+  // 3/26 online
+  {d:'2026-03-26',n:'#34488',src:'Google',amt:1080},
+  {d:'2026-03-26',n:'#34489',src:'direct',amt:1780},
+  {d:'2026-03-26',n:'#34490',src:'direct',amt:2360},
+  {d:'2026-03-26',n:'#34491',src:'Facebook/Paid',amt:1380},
+  {d:'2026-03-26',n:'#34492',src:'Meta/CPC',amt:1970},
+  {d:'2026-03-26',n:'#34493',src:'direct',amt:3078},
+  {d:'2026-03-26',n:'#34494',src:'AKO Hub',amt:770},
+  {d:'2026-03-26',n:'#34495',src:'Facebook/Paid',amt:5320},
+  {d:'2026-03-26',n:'#34496',src:'direct',amt:1950},
+  {d:'2026-03-26',n:'#34497',src:'AKO Hub',amt:3800},
+  {d:'2026-03-26',n:'#34498',src:'Google',amt:1501},
+  {d:'2026-03-26',n:'#34499',src:'Facebook/Paid',amt:2242},
+  {d:'2026-03-26',n:'#34500',src:'LINE/RichMenu',amt:1580},
+  {d:'2026-03-26',n:'#34501',src:'direct',amt:1870},
+  {d:'2026-03-26',n:'#34502',src:'Google',amt:2510},
+  {d:'2026-03-26',n:'#34504',src:'AKO Hub',amt:931},
+  {d:'2026-03-26',n:'#34507',src:'AKO Hub',amt:1117},
+  {d:'2026-03-26',n:'#34511',src:'Shopify',amt:1501},
+  {d:'2026-03-26',n:'#34517',src:'Email',amt:931},
+  {d:'2026-03-26',n:'#34518',src:'AKO Hub',amt:5910},
+  {d:'2026-03-26',n:'#34519',src:'direct',amt:2560},
+  {d:'2026-03-26',n:'#34520',src:'unknown',amt:5244},
+  {d:'2026-03-26',n:'#34521',src:'direct',amt:1180},
+  {d:'2026-03-26',n:'#34522',src:'direct',amt:390},
+  {d:'2026-03-26',n:'#34524',src:'direct',amt:2052},
+  {d:'2026-03-26',n:'#34525',src:'direct',amt:3450},
+  {d:'2026-03-26',n:'#34526',src:'direct',amt:4040},
+  {d:'2026-03-26',n:'#34527',src:'LINE/Omnichat',amt:1800},
+  {d:'2026-03-26',n:'#34528',src:'Meta/CPC',amt:1080},
+  // 3/27 online
+  {d:'2026-03-27',n:'#34529',src:'Instagram/HOME',amt:3550},
+  {d:'2026-03-27',n:'#34530',src:'direct',amt:3648},
+  {d:'2026-03-27',n:'#34531',src:'direct',amt:2023.5},
+  {d:'2026-03-27',n:'#34532',src:'direct',amt:2660},
+  {d:'2026-03-27',n:'#34533',src:'Facebook',amt:1180},
+  {d:'2026-03-27',n:'#34535',src:'AKO Hub',amt:4720},
+  {d:'2026-03-27',n:'#34537',src:'unknown',amt:2760},
+  {d:'2026-03-27',n:'#34538',src:'direct',amt:3300},
+  {d:'2026-03-27',n:'#34541',src:'AKO Hub',amt:931},
+  {d:'2026-03-27',n:'#34543',src:'Google',amt:2820},
+  {d:'2026-03-27',n:'#34547',src:'direct',amt:2765},
+  {d:'2026-03-27',n:'#34551',src:'direct',amt:6400},
+  {d:'2026-03-27',n:'#34555',src:'Facebook',amt:655.5},
+  {d:'2026-03-27',n:'#34558',src:'AKO Hub',amt:1080},
+  {d:'2026-03-27',n:'#34559',src:'Google',amt:1900},
+  {d:'2026-03-27',n:'#34561',src:'Google',amt:2432},
+  {d:'2026-03-27',n:'#34565',src:'Google',amt:2860},
+  {d:'2026-03-27',n:'#34566',src:'TrustPay',amt:1310},
+  {d:'2026-03-27',n:'#34567',src:'Facebook/Paid',amt:1360},
+  // 3/28 online
+  {d:'2026-03-28',n:'#34568',src:'AKO Hub',amt:2337},
+  {d:'2026-03-28',n:'#34569',src:'direct',amt:800},
+  {d:'2026-03-28',n:'#34570',src:'direct',amt:2570},
+  {d:'2026-03-28',n:'#34571',src:'Google',amt:1880},
+  {d:'2026-03-28',n:'#34572',src:'Meta/CPC',amt:1860},
+  {d:'2026-03-28',n:'#34573',src:'Google/Sync',amt:3196},
+  {d:'2026-03-28',n:'#34574',src:'LINE/Omnichat',amt:2160},
+  {d:'2026-03-28',n:'#34575',src:'AKO Hub',amt:4460},
+  {d:'2026-03-28',n:'#34576',src:'Meta/CPC',amt:2760},
+  {d:'2026-03-28',n:'#34577',src:'Google',amt:780},
+  {d:'2026-03-28',n:'#34578',src:'Meta/CPC',amt:1800},
+  {d:'2026-03-28',n:'#34579',src:'Facebook',amt:1580},
+  {d:'2026-03-28',n:'#34580',src:'LINE/Omnichat',amt:2370},
+  {d:'2026-03-28',n:'#34581',src:'Google',amt:1380},
+  {d:'2026-03-28',n:'#34582',src:'AKO Hub',amt:5040},
+  {d:'2026-03-28',n:'#34583',src:'AKO Hub',amt:2297},
+  {d:'2026-03-28',n:'#34584',src:'LINE/RichMenu',amt:3320},
+  {d:'2026-03-28',n:'#34586',src:'Google',amt:1845},
+  {d:'2026-03-28',n:'#34587',src:'Instagram/HOME',amt:3160},
+  {d:'2026-03-28',n:'#34590',src:'direct',amt:5420},
+  {d:'2026-03-28',n:'#34599',src:'unknown',amt:2370},
+  {d:'2026-03-28',n:'#34601',src:'Facebook/Paid',amt:1180},
+  {d:'2026-03-28',n:'#34604',src:'LINE/Omnichat',amt:290},
+  {d:'2026-03-28',n:'#34605',src:'AKO Hub',amt:3150},
+  {d:'2026-03-28',n:'#34610',src:'AKO Hub',amt:1830},
+  {d:'2026-03-28',n:'#34612',src:'direct',amt:690},
+  {d:'2026-03-28',n:'#34614',src:'Google',amt:2052},
+  {d:'2026-03-28',n:'#34618',src:'Google',amt:4440},
+  {d:'2026-03-28',n:'#34619',src:'LINE/Omnichat',amt:1970},
+  {d:'2026-03-28',n:'#34623',src:'Google',amt:890},
+  {d:'2026-03-28',n:'#34624',src:'LINE/RichMenu',amt:980},
+  {d:'2026-03-28',n:'#34627',src:'Facebook/Paid',amt:939},
+  {d:'2026-03-28',n:'#34629',src:'Google',amt:1080},
+  {d:'2026-03-28',n:'#34630',src:'Google',amt:890},
+  {d:'2026-03-28',n:'#34631',src:'AKO Hub',amt:1080},
+  {d:'2026-03-28',n:'#34637',src:'Google',amt:1080},
+  {d:'2026-03-28',n:'#34639',src:'direct',amt:1740},
+  {d:'2026-03-28',n:'#34640',src:'direct',amt:615},
+  {d:'2026-03-28',n:'#34641',src:'direct',amt:4910},
+  {d:'2026-03-28',n:'#34642',src:'direct',amt:3990},
+  {d:'2026-03-28',n:'#34643',src:'AKO Hub',amt:3360},
+  {d:'2026-03-28',n:'#34644',src:'direct',amt:1280},
+  {d:'2026-03-28',n:'#34645',src:'direct',amt:2992.5},
+  // 3/29 online
+  {d:'2026-03-29',n:'#34646',src:'Google',amt:1930},
+  {d:'2026-03-29',n:'#34647',src:'AKO Hub',amt:980},
+  {d:'2026-03-29',n:'#34648',src:'direct',amt:2422.5},
+  {d:'2026-03-29',n:'#34649',src:'Gmail/App',amt:1881},
+  {d:'2026-03-29',n:'#34650',src:'Facebook/Paid',amt:850},
+  {d:'2026-03-29',n:'#34651',src:'Google',amt:980},
+  {d:'2026-03-29',n:'#34652',src:'Google',amt:1500},
+  {d:'2026-03-29',n:'#34653',src:'direct',amt:4627},
+  {d:'2026-03-29',n:'#34654',src:'Facebook/Paid',amt:1470},
+  {d:'2026-03-29',n:'#34655',src:'KOL/Story',amt:590},
+  {d:'2026-03-29',n:'#34656',src:'direct',amt:834},
+  {d:'2026-03-29',n:'#34658',src:'LINE/RichMenu',amt:3090},
+  {d:'2026-03-29',n:'#34659',src:'Google',amt:1680},
+  {d:'2026-03-29',n:'#34661',src:'direct',amt:2780},
+  {d:'2026-03-29',n:'#34662',src:'direct',amt:1570},
+  {d:'2026-03-29',n:'#34665',src:'Google',amt:1180},
+  {d:'2026-03-29',n:'#34668',src:'unknown',amt:1995},
+  {d:'2026-03-29',n:'#34669',src:'Facebook/Paid',amt:1580},
+  {d:'2026-03-29',n:'#34670',src:'LINE/Omnichat',amt:4720},
+  {d:'2026-03-29',n:'#34674',src:'direct',amt:980},
+  {d:'2026-03-29',n:'#34675',src:'LINE/Omnichat',amt:870},
+  {d:'2026-03-29',n:'#34683',src:'Google',amt:1880},
+  {d:'2026-03-29',n:'#34685',src:'Shopify',amt:6900},
+  {d:'2026-03-29',n:'#34687',src:'AKO Hub',amt:1700},
+  {d:'2026-03-29',n:'#34691',src:'Google',amt:2340},
+  {d:'2026-03-29',n:'#34692',src:'Google',amt:2346.5},
+  {d:'2026-03-29',n:'#34693',src:'Meta/CPC',amt:2260},
+  {d:'2026-03-29',n:'#34694',src:'Google',amt:3560},
+  {d:'2026-03-29',n:'#34698',src:'direct',amt:5610},
+  {d:'2026-03-29',n:'#34700',src:'AKO Hub',amt:2260},
+  {d:'2026-03-29',n:'#34704',src:'Meta/CPC',amt:1780},
+  {d:'2026-03-29',n:'#34710',src:'Shopify',amt:2432},
+  {d:'2026-03-29',n:'#34712',src:'LINE/Omnichat',amt:1180},
+  {d:'2026-03-29',n:'#34720',src:'Google',amt:1580},
+  {d:'2026-03-29',n:'#34721',src:'Instagram/CPC',amt:5100},
+  {d:'2026-03-29',n:'#34724',src:'direct',amt:2670},
+  {d:'2026-03-29',n:'#34725',src:'direct',amt:1966.5},
+  {d:'2026-03-29',n:'#34726',src:'direct',amt:4810},
+  {d:'2026-03-29',n:'#34727',src:'direct',amt:2470},
+  {d:'2026-03-29',n:'#34728',src:'direct',amt:1970},
+  // 3/30 online
+  {d:'2026-03-30',n:'#34729',src:'Instagram/CPC',amt:1180},
+  {d:'2026-03-30',n:'#34730',src:'direct',amt:2052},
+  {d:'2026-03-30',n:'#34731',src:'AKO Hub',amt:3350},
+  {d:'2026-03-30',n:'#34732',src:'LINE/RichMenu',amt:3940},
+  {d:'2026-03-30',n:'#34733',src:'Google',amt:2810},
+  {d:'2026-03-30',n:'#34734',src:'LINE/RichMenu',amt:1955},
+  {d:'2026-03-30',n:'#34735',src:'AKO Hub',amt:4460},
+  {d:'2026-03-30',n:'#34736',src:'direct',amt:2360},
+  {d:'2026-03-30',n:'#34737',src:'direct',amt:3950},
+  {d:'2026-03-30',n:'#34738',src:'Meta/CPC',amt:2280},
+  {d:'2026-03-30',n:'#34739',src:'LINE/RichMenu',amt:1955},
+  {d:'2026-03-30',n:'#34740',src:'Facebook/Paid',amt:2030},
+  {d:'2026-03-30',n:'#34741',src:'Meta/CPC',amt:2370},
+  {d:'2026-03-30',n:'#34742',src:'direct',amt:4310},
+  {d:'2026-03-30',n:'#34743',src:'Instagram/HOME',amt:3543.5},
+  {d:'2026-03-30',n:'#34744',src:'AKO Hub',amt:2489},
+  {d:'2026-03-30',n:'#34746',src:'AKO Hub',amt:1380},
+  {d:'2026-03-30',n:'#34747',src:'Facebook/Paid',amt:1900},
+  {d:'2026-03-30',n:'#34748',src:'AKO Hub',amt:2460},
+  {d:'2026-03-30',n:'#34749',src:'AKO Hub',amt:1311},
+  {d:'2026-03-30',n:'#34751',src:'direct',amt:7090},
+  {d:'2026-03-30',n:'#34753',src:'direct',amt:2242},
+  {d:'2026-03-30',n:'#34754',src:'Meta/Post',amt:1180},
+  {d:'2026-03-30',n:'#34755',src:'direct',amt:2470},
+  {d:'2026-03-30',n:'#34756',src:'Google',amt:4820},
+  {d:'2026-03-30',n:'#34762',src:'AKO Hub',amt:2650},
+  {d:'2026-03-30',n:'#34764',src:'Google',amt:2960},
+  {d:'2026-03-30',n:'#34769',src:'direct',amt:2628},
+  {d:'2026-03-30',n:'#34772',src:'Facebook/Paid',amt:1180},
+  {d:'2026-03-30',n:'#34773',src:'Meta/CPC',amt:2260},
+  {d:'2026-03-30',n:'#34774',src:'Facebook/Paid',amt:1280},
+  {d:'2026-03-30',n:'#34775',src:'Google',amt:1180},
+  {d:'2026-03-30',n:'#34776',src:'Google',amt:1180},
+  {d:'2026-03-30',n:'#34777',src:'Meta/CPC',amt:1870},
+];
+
+// ORDER_SRC_RAW for compatibility
+const ORDER_SRC_RAW = ORDER_SRC.map(r=>({d:r.d,src:r.src,amt:r.amt}));
+
+// ── 蝦皮資料（Google Sheets 真實資料 2025/03-2026/03/30，數量≥6批量訂單）──
+const SHOPEE_FLAVOR = [
+  {f:'生巧克力',q:791,r:70902},
+  {f:'醇濃奶茶',q:258,r:27855},
+  {f:'抹茶那堤',q:137,r:19620},
+  {f:'焦糖海鹽',q:129,r:16208},
+  {f:'優格多多',q:65,r:8163},
+  {f:'草莓',q:43,r:7995},
+];
+const SHOPEE_MONTH = [
+  {m:'2025/03',q:154,r:20050},{m:'2025/04',q:113,r:16966},{m:'2025/05',q:247,r:27524},
+  {m:'2025/06',q:193,r:15183},{m:'2025/07',q:56,r:5934},{m:'2025/08',q:147,r:16845},
+  {m:'2025/09',q:70,r:9878},{m:'2025/10',q:140,r:330849},{m:'2025/11',q:47,r:3795},
+  {m:'2025/12',q:6,r:689},{m:'2026/01',q:72,r:20673},{m:'2026/02',q:52,r:7600},
+  {m:'2026/03',q:234,r:17252},
+];
+const SHOPEE_APPAREL = [
+  {t:'2025/04/25',n:'ArcTech™ 機能寬肩訓練背心 [黑-XL]',q:6,r:3996},
+  {t:'2025/08/19',n:'ArcTech™ AROAK CREW機能背心 [酒紅-XL]',q:6,r:5340},
+  {t:'2025/10/15',n:'AirFlex™ 拉鍊貼袋訓練短褲（3色）',q:28,r:38612},
+  {t:'2025/10/16',n:'AirFlex™ 拉鍊貼袋訓練短褲（3色）',q:29,r:39991},
+  {t:'2025/10/16',n:'AirFlex™ 磁釦機能口袋訓練長褲（2色）',q:26,r:43680},
+  {t:'2026/02/05',n:'ArcTech™ 機能訓練上衣 [白-M]',q:6,r:4740},
+  {t:'2026/03/03',n:'ArcTech™ 機能寬肩訓練背心 [黑-XL]',q:7,r:5250},
+];
+const SHOPEE_2026 = [
+  {t:'2026/01/01',n:'AROAK全分離乳清(生巧克力)',q:7,r:1135},
+  {t:'2026/01/06',n:'AROAK全分離乳清(優格多多)',q:10,r:583},
+  {t:'2026/01/07',n:'AROAK全分離乳清(草莓)',q:15,r:2295},
+  {t:'2026/01/17',n:'AROAK全分離乳清(醇濃奶茶) 15入袋裝',q:10,r:7500},
+  {t:'2026/01/18',n:'AROAK全分離乳清(生巧克力) x3筆',q:18,r:3580},
+  {t:'2026/01/21',n:'AROAK全分離乳清(生巧克力) 15入袋裝',q:6,r:4500},
+  {t:'2026/01/25',n:'AROAK全分離乳清(生巧克力)',q:6,r:1080},
+  {t:'2026/02/04',n:'AROAK全分離乳清(生巧克力)',q:15,r:1000},
+  {t:'2026/02/05',n:'ArcTech™ 機能訓練上衣 [白-M]',q:6,r:4740},
+  {t:'2026/02/09',n:'AROAK全分離乳清(生巧克力) x2筆',q:16,r:860},
+  {t:'2026/02/23',n:'AROAK全分離乳清(生巧克力)',q:15,r:1000},
+  {t:'2026/03/03',n:'ArcTech™ 機能寬肩訓練背心 [黑-XL]',q:7,r:5250},
+  {t:'2026/03/16',n:'AROAK全分離乳清(焦糖海鹽)',q:15,r:795},
+  {t:'2026/03/23',n:'AROAK全分離乳清(生巧克力)',q:10,r:848},
+  {t:'2026/03/24',n:'AROAK全分離乳清(生巧克力) 50包',q:50,r:2500},
+  {t:'2026/03/24',n:'AROAK全分離乳清(生巧克力) 30包',q:30,r:1500},
+  {t:'2026/03/24',n:'AROAK全分離乳清(生巧克力) 20包',q:20,r:1000},
+  {t:'2026/03/25',n:'AROAK全分離乳清(生巧克力) 4筆',q:79,r:4140},
+  {t:'2026/03/28',n:'AROAK全分離乳清(生巧克力)',q:10,r:530},
+  {t:'2026/03/30',n:'AROAK全分離乳清(生巧克力)',q:13,r:689},
+];
+
+
+// ═══ SHOPIFY SUB-TAB FUNCTIONS ═══
+function shTab(id, btn){
+  document.querySelectorAll('.shtab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.sh-panel').forEach(p=>p.style.display='none');
+  if(btn) btn.classList.add('on');
+  const panel = document.getElementById('sh-'+id);
+  if(panel) panel.style.display='block';
+  if(!DATA_READY) return;
+  if(id==='order') renderOrderDay();
+  else if(id==='product') renderProductRank();
+  else if(id==='source') renderSourceRank();
+  else if(id==='store') { delete CHARTS['cStorePie']; delete CHARTS['cStoreTrend']; renderStore(); }
+  else if(id==='shopee') renderShopee();
+}
+
+function renderOrderDay(){
+  const day = document.getElementById('orderDayPick').value;
+  // 用 GA4 來源資料（因為逐筆訂單來源只有近幾天）
+  const bySrc={};
+  let dayTotal=0;
+  // 先嘗試用 ORDER_SRC_RAW（動態載入的逐筆訂單）
+  if(typeof ORDER_SRC_RAW !== 'undefined' && ORDER_SRC_RAW.length>0){
+    const rows = ORDER_SRC_RAW.filter(r=>r.d===day && r.amt>0);
+    rows.forEach(r=>{if(!bySrc[r.src])bySrc[r.src]=0;bySrc[r.src]+=r.amt;dayTotal+=r.amt;});
+  } else {
+    // Fallback：用 S3 的日銷售
+    dayTotal = S3[day]||0;
+    bySrc['Shopify 銷售'] = dayTotal;
+  }
+  const srcKeys=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]);
+  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d'];
+
+  if(srcKeys.length>0){
+    mkChart('cOrderDayPie',{type:'doughnut',data:{
+      labels:srcKeys,datasets:[{data:srcKeys.map(k=>bySrc[k]),backgroundColor:clrs,borderWidth:0}]
+    },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      plugins:{legend:{display:true,position:'right',labels:{color:'#7a8fa8',font:{size:10},boxWidth:8}},
+               tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
+  }
+
+  // Trend chart（日銷售 30天）
+  const DK=DK_fn();
+  mkChart('cShOrderTrend',{type:'bar',data:{
+    labels:DK.map(d=>d.slice(5)),
+    datasets:[{data:DK.map(d=>S3[d]||0),
+      backgroundColor:DK.map(d=>d===day?'rgba(75,142,255,.9)':'rgba(75,142,255,.4)'),borderRadius:3}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${fmt(ctx.parsed)}`}}},
+    scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},
+            y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+
+  // Detail table（用 ORDER_CNT GA4 資料）
+  const el=document.getElementById('tShDaily');
+  if(el){
+    el.innerHTML=`<thead><tr><th class="tl">日期</th><th>Shopify 銷售</th><th>GA4 購買</th><th>GA4 收益</th><th>KPI%</th></tr></thead><tbody>`+
+    [...DK].reverse().map(d=>{
+      const v=S3[d]||0,tx=GA3[d]?.tx||0,rev=GA3[d]?.rev||0;
+      return`<tr ${d===day?'class="wk-curr"':''}><td class="tl mn" style="color:var(--t3)">${d}</td>
+        <td class="mn" style="color:${v>=200000?'var(--grn)':v>=100000?'var(--t1)':'var(--red)'}">${fmt(v)}</td>
+        <td class="mn">${tx}</td><td class="mn">${fmt(rev)}</td>
+        <td><span class="pill ${v>=200000?'pg':v>=100000?'py':'pr'}">${(v/200000*100).toFixed(0)}%</span></td></tr>`;
+    }).join('')+'</tbody>';
+  }
+  // 今日訂單明細
+  const el2=document.getElementById('tOrderDetail');
+  if(el2){
+    const v=S3[day]||0,tx=GA3[day]?.tx||0,rev=GA3[day]?.rev||0;
+    const aov=tx?Math.round(rev/tx):0;
+    el2.innerHTML=`<thead><tr><th class="tl">項目</th><th>數值</th></tr></thead><tbody>
+      <tr><td class="tl">Shopify 淨銷售</td><td class="mn" style="color:${v>=200000?'var(--grn)':'var(--t1)'}">${fmt(v)}</td></tr>
+      <tr><td class="tl">GA4 購買筆數</td><td class="mn">${tx}筆</td></tr>
+      <tr><td class="tl">GA4 購買收益</td><td class="mn">${fmt(rev)}</td></tr>
+      <tr><td class="tl">GA4 客單價</td><td class="mn">${fmt(aov)}</td></tr>
+      <tr><td class="tl">KPI 達成率</td><td class="mn"><span class="pill ${v>=200000?'pg':v>=100000?'py':'pr'}">${(v/200000*100).toFixed(1)}%</span></td></tr>
+    </tbody>`;
+  }
+}
+
+function renderSourceRank(){
+  if(CHARTS['cSrcRevPie']) { CHARTS['cSrcRevPie'].destroy(); delete CHARTS['cSrcRevPie']; }
+  if(CHARTS['cSrcOrdPie']) { CHARTS['cSrcOrdPie'].destroy(); delete CHARTS['cSrcOrdPie']; }
+  // 用全月 GA4 來源資料
+  const all = GA4_SRC.slice(0,10);
+  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d','#00bcd4','#cddc39','#ff9800'];
+
+  mkChart('cSrcRevPie',{type:'doughnut',data:{
+    labels:all.map(r=>r.src),datasets:[{data:all.map(r=>r.rev),backgroundColor:clrs,borderWidth:0}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+    plugins:{legend:{display:true,position:'right',labels:{color:'#7a8fa8',font:{size:10},boxWidth:8}},
+             tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
+
+  mkChart('cSrcOrdPie',{type:'doughnut',data:{
+    labels:all.map(r=>r.src),datasets:[{data:all.map(r=>r.tx),backgroundColor:clrs,borderWidth:0}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+    plugins:{legend:{display:false},
+             tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed}筆`}}}}});
+
+  const el1=document.getElementById('tSrcRev');
+  if(el1) el1.innerHTML=`<thead><tr><th class="tl">來源/媒介</th><th>收益</th><th>佔比</th><th>客單價</th></tr></thead><tbody>`+
+    all.map(r=>{const tot=all.reduce((s,x)=>s+x.rev,0);return`<tr><td class="tl">${r.src}</td><td class="mn">${fmt(r.rev)}</td><td><span class="pill ${r.rev/tot>=.1?'pg':r.rev/tot>=.03?'py':'pr'}">${(r.rev/tot*100).toFixed(1)}%</span></td><td class="mn">${fmt(r.tx?r.rev/r.tx:0)}</td></tr>`;}).join('')+'</tbody>';
+
+  const el2=document.getElementById('tSrcOrd');
+  if(el2) el2.innerHTML=`<thead><tr><th class="tl">來源/媒介</th><th>購買</th><th>Sessions</th><th>轉換率</th></tr></thead><tbody>`+
+    all.map(r=>{const cvr=(r.s?r.tx/r.s*100:0).toFixed(2);return`<tr><td class="tl">${r.src}</td><td class="mn">${r.tx}</td><td class="mn">${r.s.toLocaleString()}</td><td><span class="pill ${cvr>=3?'pg':cvr>=1?'py':'pr'}">${cvr}%</span></td></tr>`;}).join('')+'</tbody>';
+}
+
+function renderStore(){
+  if(CHARTS['cStorePie']) return; // already rendered
+  const dates = Object.keys(STORE_DATA).sort();
+  const stores = ['高雄-夢時代','台中-新光三越中港店','新莊-宏匯廣場'];
+  const storeTotal = {};
+  stores.forEach(s=>{storeTotal[s]=dates.reduce((sum,d)=>sum+(STORE_DATA[d]?.[s]||0),0);});
+  const grand = stores.reduce((s,st)=>s+storeTotal[st],0);
+  const onlineTotal = Math.max(0, sumO(S3) - grand);
+  const allTotal = grand + onlineTotal;
+
+  mkChart('cStorePie',{type:'doughnut',data:{
+    labels:['官網（線上）','高雄-夢時代','新莊-宏匯廣場','台中-新光三越中港店'],
+    datasets:[{data:[onlineTotal,storeTotal['高雄-夢時代']||0,storeTotal['新莊-宏匯廣場']||0,storeTotal['台中-新光三越中港店']||0],
+      backgroundColor:['#4b8eff','#f0a020','#28d97a','#9d7fff'],borderWidth:0,hoverOffset:4}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+    plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)} (${allTotal?(ctx.parsed/allTotal*100).toFixed(1):0}%)`}}}}});
+
+  // Trend chart
+  const storeClrs={'高雄-夢時代':'#f0a020','台中-新光三越中港店':'#9d7fff','新莊-宏匯廣場':'#28d97a'};
+  mkChart('cStoreTrend',{type:'bar',data:{
+    labels:dates.map(d=>d.slice(5)),
+    datasets:stores.map(s=>({label:s.split('-')[1]||s,data:dates.map(d=>(STORE_DATA[d]?.[s]||0)),backgroundColor:storeClrs[s]+'99',borderRadius:3}))
+  },options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},
+    scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},
+            y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+
+  // Detail table
+  const el=document.getElementById('tStoreDetail');
+  if(el){
+    el.innerHTML=`<thead><tr><th class="tl">日期</th>${stores.map(s=>`<th>${s.split('-')[1]||s}</th>`).join('')}<th>門市合計</th></tr></thead><tbody>`+
+    [...dates].reverse().map(d=>{
+      const tot=stores.reduce((s,st)=>s+(STORE_DATA[d]?.[st]||0),0);
+      return`<tr><td class="tl mn" style="color:var(--t3)">${d}</td>${stores.map(s=>`<td class="mn">${STORE_DATA[d]?.[s]?fmt(STORE_DATA[d][s]):'—'}</td>`).join('')}<td class="mn" style="font-weight:600">${fmt(tot)}</td></tr>`;
+    }).join('')+'</tbody>';
+  }
+
+  // Legend (覆蓋靜態文字)
+  const legEls = document.querySelectorAll('#sh-store .store-leg');
+  if(legEls.length>0){
+    const vals=[onlineTotal,...stores.map(s=>storeTotal[s]||0)];
+    const labels=['官網（線上）',...stores.map(s=>s.split('-')[1]||s)];
+    legEls.forEach((el,i)=>{
+      const val=vals[i]||0;
+      el.querySelector('.store-val')&&(el.querySelector('.store-val').textContent=fmt(val));
+      el.querySelector('.store-pct')&&(el.querySelector('.store-pct').textContent=allTotal?(val/allTotal*100).toFixed(1)+'%':'—');
+    });
+  }
+}
+
+function renderProductRank(){
+  const day = document.getElementById('productDayPick').value;
+  const rows = PROD_RAW.filter(r=>r.d===day);
+
+  // Aggregate by base product name (strip color)
+  const byName = {};
+  rows.forEach(r=>{
+    const base = r.t.replace(/\s*\([^)]*\)\s*$/, '').trim(); // remove last (color)
+    if(!byName[base]) byName[base]={name:base,qty:0,rev:0,full:r.t};
+    byName[base].qty += r.q;
+    byName[base].rev += r.q * r.p;
+  });
+  const all = Object.values(byName);
+  const byQty = [...all].sort((a,b)=>b.qty-a.qty).slice(0,20);
+  const byRev = [...all].sort((a,b)=>b.rev-a.rev).slice(0,20);
+
+  const pRow=(i,r,val,isRev)=>{
+    const pct=isRev?Math.round(r.rev/byRev[0].rev*100):Math.round(r.qty/byQty[0].qty*100);
+    const color=i===0?'var(--amb)':i===1?'var(--t2)':i===2?'#cd7f32':'var(--t3)';
+    return`<tr><td class="tl" style="font-family:var(--mono);color:${color};font-size:10px;width:24px">#${i+1}</td>
+      <td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</td>
+      <td class="mn">${isRev?fmt(r.rev):`${r.qty}件`}</td>
+      <td style="min-width:60px"><div style="height:4px;background:var(--s4);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:4px;background:${i<3?'var(--amb)':'var(--blue)'};border-radius:2px"></div></div></td></tr>`;
+  };
+
+  document.getElementById('tProdQty').innerHTML=
+    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售量</th><th></th></tr></thead><tbody>`+
+    byQty.map((r,i)=>pRow(i,r,r.qty,false)).join('')+'</tbody>';
+  document.getElementById('tProdRev').innerHTML=
+    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售額</th><th></th></tr></thead><tbody>`+
+    byRev.map((r,i)=>pRow(i,r,r.rev,true)).join('')+'</tbody>';
+
+  // Category pie
+  const cats = {};
+  rows.forEach(r=>{
+    let cat='其他';
+    if(r.t.includes('乳清')) cat='乳清蛋白';
+    else if(r.t.includes('長褲')||r.t.includes('短褲')||r.t.includes('短褲')) cat='褲類';
+    else if(r.t.includes('背心')||r.t.includes('挖背')) cat='背心類';
+    else if(r.t.includes('上衣')||r.t.includes('短袖')||r.t.includes('落肩')||r.t.includes('訓練上衣')) cat='上衣類';
+    else if(r.t.includes('哥吉拉')) cat='哥吉拉聯名';
+    else if(r.t.includes('外套')||r.t.includes('夾克')||r.t.includes('襯衫')) cat='外套類';
+    else if(r.t.includes('瑜珈')||r.t.includes('蜜臀')) cat='女裝';
+    else if(r.t.includes('帽')||r.t.includes('襪')||r.t.includes('拉力帶')||r.t.includes('購物袋')) cat='配件';
+    if(!cats[cat]) cats[cat]=0;
+    cats[cat]+=r.q;
+  });
+  const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
+  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff4d4d','#ff6b9d','#ffd07a'];
+  mkChart('cProdCat',{type:'doughnut',data:{
+    labels:catKeys,
+    datasets:[{data:catKeys.map(k=>cats[k]),backgroundColor:clrs.slice(0,catKeys.length),borderWidth:0,hoverOffset:4}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+  plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:9},boxWidth:8}},tooltip:AX.tt}}});
+
+  document.getElementById('tProdCatTbl').innerHTML=
+    `<thead><tr><th class="tl">品類</th><th>件數</th></tr></thead><tbody>`+
+    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${cats[k]}</td></tr>`).join('')+'</tbody>';
+}
+
+// ── 來源媒介 ──
+
+function renderShopee(){
+  if(CHARTS['cShopeeFlavor']) return; // already rendered
+
+  // Flavor bar chart
+  const flavorClrs=['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d'];
+  mkChart('cShopeeFlavor',{type:'bar',data:{
+    labels:SHOPEE_FLAVOR.map(f=>f.f),
+    datasets:[{label:'銷售量(包)',data:SHOPEE_FLAVOR.map(f=>f.q),backgroundColor:flavorClrs,borderRadius:4}]
+  },options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+  plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.x}包 / NT$${ctx.dataset.data[ctx.dataIndex]?SHOPEE_FLAVOR[ctx.dataIndex].r.toLocaleString():0}`}}},
+  scales:{x:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}},y:{ticks:AX.t,grid:{display:false},border:{color:'transparent'}}}}});
+
+  // Flavor table
+  const totQ=SHOPEE_FLAVOR.reduce((s,f)=>s+f.q,0);
+  document.getElementById('tShopeeFlavor').innerHTML=
+    `<thead><tr><th class="tl">口味</th><th>銷量</th><th>佔比</th><th>銷售額</th></tr></thead><tbody>`+
+    SHOPEE_FLAVOR.map((f,i)=>{
+      const pct=((f.q/totQ)*100).toFixed(1);
+      const bar=`<div style="display:flex;align-items:center;gap:5px"><div style="width:${Math.round(f.q/791*80)}px;height:4px;background:${flavorClrs[i]||'var(--blue)'};border-radius:2px"></div></div>`;
+      return`<tr><td class="tl">${f.f}</td><td class="mn">${f.q}包</td><td class="mn">${pct}%</td><td class="mn">${fmt(f.r)}</td></tr>`;
+    }).join('')+'</tbody>';
+
+  // Monthly trend
+  const monthlyClrs=SHOPEE_MONTH.map(m=>m.m.startsWith('2026')?'rgba(40,217,122,.7)':'rgba(75,142,255,.5)');
+  mkChart('cShopeeMonth',{type:'bar',data:{
+    labels:SHOPEE_MONTH.map(m=>m.m),
+    datasets:[{label:'銷量(包/件)',data:SHOPEE_MONTH.map(m=>m.q),backgroundColor:monthlyClrs,borderRadius:3}]
+  },options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.y}包/件 · NT$${SHOPEE_MONTH[ctx.dataIndex].r.toLocaleString()}`}}},
+  scales:{x:{ticks:{...AX.t,maxRotation:45},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+
+  // Apparel table
+  document.getElementById('tShopeeApparel').innerHTML=
+    `<thead><tr><th class="tl">日期</th><th class="tl">商品</th><th>數量</th><th>金額</th></tr></thead><tbody>`+
+    SHOPEE_APPAREL.map(a=>`<tr><td class="tl" style="font-family:var(--mono);color:var(--t3)">${a.t}</td>
+      <td class="tl">${a.n}</td><td class="mn" style="color:var(--pur)">${a.q}件</td>
+      <td class="mn" style="color:var(--amb)">${fmt(a.r)}</td></tr>`).join('')+'</tbody>';
+
+  // 2026 recent
+  document.getElementById('tShopeeRecent').innerHTML=
+    `<thead><tr><th class="tl">日期</th><th class="tl">商品</th><th>數量</th><th>金額</th></tr></thead><tbody>`+
+    SHOPEE_2026.map(r=>`<tr><td class="tl" style="font-family:var(--mono);color:var(--t3)">${r.t}</td>
+      <td class="tl">${r.n}</td><td class="mn">${r.q}</td><td class="mn">${fmt(r.r)}</td></tr>`).join('')+'</tbody>';
+}
+
+// ── 商品排行 ──
+
+function drawShopify(){
+  const tp=getTPDays();
+  const{days,vals,mode}=tp;
+  const DK=DK_fn();
+  document.getElementById('badge-shopify').textContent=mode==='30d'?`近30天(${DK[0]?.slice(5)}–${DK[DK.length-1]?.slice(5)})`:mode==='mom'?'MoM':mode==='week'?'週對比':mode==='yoy'?'YoY':'單日';
+  document.getElementById('shopify-cmp').innerHTML=buildCmpKPI(tp);
+  // 週別/單日 chart 標題
+  const chartTitle = document.getElementById('sh-chart-title');
+  if(chartTitle) chartTitle.textContent = tp.title||'Shopify 日銷售';
+  buildCmpChart('cShopSales',tp,'bar');
+  // 觸發 active sub-tab render
+  const activeBtn = document.querySelector('.shtab.on');
+  if(activeBtn){
+    const id = activeBtn.id.replace('shtab-','');
+    shTab(id, activeBtn);
+  } else {
+    shTab('order', document.getElementById('shtab-order'));
+  }
+}
 
 </script>
 </body>
