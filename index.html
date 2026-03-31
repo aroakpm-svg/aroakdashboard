@@ -365,10 +365,7 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   <div id="sh-product" class="sh-panel" style="display:none">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:var(--t3)">
       選日：
-      <select id="productDayPick" onchange="renderProductRank()" style="background:var(--s2);border:1px solid var(--bdr);color:var(--t1);font-size:11px;padding:3px 8px;border-radius:6px;font-family:var(--font);cursor:pointer">
-        <option value="2026-03-30">3/30（最新）</option><option value="2026-03-29">3/29</option><option value="2026-03-28">3/28</option><option value="2026-03-27">3/27</option>
-        <option value="2026-03-26">3/26</option><option value="2026-03-25">3/25</option><option value="2026-03-24">3/24</option>
-      </select>
+      <span id="prodPeriodLabel" style="font-size:11px;color:var(--blue)">（依目前時段）</span>
       <span style="color:var(--t4)">（資料含3/24–3/30，依選擇日過濾）</span>
     </div>
     <div class="g3">
@@ -515,9 +512,8 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   <!-- META 素材面板 -->
   <div id="adp-meta">
     <div class="ib blue" style="margin-bottom:10px"><span>💡</span><div>
-      <strong>Attribution：7d_click</strong> ·
-      轉換率 = 購買數 / 不重複點擊數 ·
-      依花費排序，花費 &lt; NT$500 已過濾
+      <strong>Attribution：7d_click</strong> · 期間：<span id="metaCreativePeriod" style="color:var(--cyan)">載入中...</span> ·
+      轉換率 = 購買數 / 不重複點擊數 · 依花費排序，花費 &lt; NT$500 已過濾
     </div></div>
     <div class="card" style="padding:0">
       <div class="tw" style="max-height:520px;overflow-y:auto">
@@ -559,9 +555,8 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   <!-- Google 素材面板 -->
   <div id="adp-google" style="display:none">
     <div class="ib blue" style="margin-bottom:10px"><span>💡</span><div>
-      <strong>Google Ads 廣告層級</strong> ·
-      轉換率 = 轉換數 / 點擊數 ·
-      PMax 廣告名稱為 null（由系統自動組合）
+      <strong>Google Ads 廣告層級</strong> · 期間：<span id="googleCreativePeriod" style="color:var(--cyan)">載入中...</span> ·
+      轉換率 = 轉換數 / 點擊數 · PMax 廣告名稱為 null（系統自動組合）
     </div></div>
     <div class="card" style="padding:0">
       <div class="tw" style="max-height:520px;overflow-y:auto">
@@ -685,7 +680,7 @@ const CHARTS = {};
 // 動態載入的資料（按日 key）
 let S3={}, S2={}, S25_3={}, S25Q4={}, GA3={}, FB3={}, GAADS={};
 let FB_CAMP=[], GA_CAMP=[];
-let STORE_DATA=[], GA4_SRC=[];
+let STORE_DATA=[], GA4_SRC=[], LINE_ITEMS_RAW=[];
 let DATA_READY = false;
 let LOADING = false;
 
@@ -806,7 +801,8 @@ async function loadAllData() {
            ga4Mar,
            fbMar, fbCamp,
            gadsMar, gadsCamp,
-           storeMar, ga4Src] = await Promise.all([
+           storeMar, ga4Src,
+           lineItems] = await Promise.all([
       // Shopify
       wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to}),
       wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:feb_from,date_to:feb_to}),
@@ -824,6 +820,8 @@ async function loadAllData() {
       wFetch('shopify',['date','order_retail_location_name','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['order_retail_location_name','notnull',null]]}),
       // GA4 Source/Medium
       wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to}),
+      // Shopify 商品排行（line item level）
+      wFetch('shopify',['date','line_item__title','line_item__quantity','line_item__price'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['line_item__quantity','gt',0]]}),
     ]);
 
     // ── Shopify by date ──
@@ -928,6 +926,14 @@ async function loadAllData() {
         rev:+r.purchase_revenue||0
       }))
       .sort((a,b)=>b.tx-a.tx);
+
+    // ── 商品排行（by date → array of {d,t,q,p}）──
+    LINE_ITEMS_RAW = (lineItems||[]).map(r=>({
+      d: r.date,
+      t: r['line_item__title']||'?',
+      q: +r['line_item__quantity']||0,
+      p: +r['line_item__price']||0
+    })).filter(r=>r.q>0);
 
     DATA_READY = true;
     LOADING = false;
@@ -1225,8 +1231,7 @@ function drawGA4(){
 function drawAds(){
   // 更新 DR_CACHE 供素材分析用
   const DK_all=DK_fn(); DR_CACHE={from:DK_all[0]||'2026-03-01',to:DK_all[DK_all.length-1]||'2026-03-31'};
-  CREATIVE_LOADED=false;
-  META_CREATIVE=[]; GOOGLE_CREATIVE=[];
+  // DR_CACHE 已在上面設好，強制重拉素材資料
   const tp=getTPDays();
   const{days,mode}=tp;
   document.getElementById('badge-ads').textContent=mode==='30d'?`近30天`:mode==='mom'?'MoM':mode==='week'?'週對比':mode==='yoy'?'YoY':'單日';
@@ -1259,7 +1264,7 @@ function drawAds(){
     {label:'Google ROAS',data:DK.map(d=>(GAADS[d]?.roas)||null),borderColor:'#f0a020',backgroundColor:'rgba(240,160,32,.08)',fill:true,tension:.3,pointRadius:2,borderWidth:2},
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
   // 載入素材資料（背景執行）
-  loadCreativeData();
+  loadCreativeData(true);
 }
 
 // ─── 優化建議 ───
@@ -1275,63 +1280,77 @@ document.getElementById('tkInput')?.addEventListener('keydown',e=>{if(e.key==='E
 
 
 function renderProductRank(){
-  const day = document.getElementById('productDayPick').value;
-  const rows = PROD_RAW.filter(r=>r.d===day);
+  // 用當前時段 days 範圍
+  const tp = getTPDays();
+  const daySet = new Set(tp.days);
+  const src = LINE_ITEMS_RAW.length > 0 ? LINE_ITEMS_RAW : PROD_RAW;
+  const rows = src.filter(r=>daySet.has(r.d));
 
-  // Aggregate by base product name (strip color)
+  // 更新期間標籤
+  const lbl = document.getElementById('prodPeriodLabel');
+  if(lbl) lbl.textContent = `（${tp.title||'近30天'}）`;
+
+  // Aggregate by base product name (strip color variants)
   const byName = {};
   rows.forEach(r=>{
-    const base = r.t.replace(/\s*\([^)]*\)\s*$/, '').trim(); // remove last (color)
-    if(!byName[base]) byName[base]={name:base,qty:0,rev:0,full:r.t};
-    byName[base].qty += r.q;
-    byName[base].rev += r.q * r.p;
+    const base = r.t.replace(/\s*[（(][^)）]*[)）]\s*$/, '').trim();
+    if(!byName[base]) byName[base]={name:base,qty:0,rev:0};
+    byName[base].qty += +r.q||0;
+    byName[base].rev += (+r.q||0) * (+r.p||0);
   });
-  const all = Object.values(byName);
+  const all = Object.values(byName).filter(r=>r.qty>0);
   const byQty = [...all].sort((a,b)=>b.qty-a.qty).slice(0,20);
   const byRev = [...all].sort((a,b)=>b.rev-a.rev).slice(0,20);
 
-  const pRow=(i,r,val,isRev)=>{
-    const pct=isRev?Math.round(r.rev/byRev[0].rev*100):Math.round(r.qty/byQty[0].qty*100);
-    const color=i===0?'var(--amb)':i===1?'var(--t2)':i===2?'#cd7f32':'var(--t3)';
-    return`<tr><td class="tl" style="font-family:var(--mono);color:${color};font-size:10px;width:24px">#${i+1}</td>
+  const maxQty = byQty[0]?.qty||1;
+  const maxRev = byRev[0]?.rev||1;
+
+  const pRow = (i,r,val,isRev) => {
+    const pct = isRev ? r.rev/maxRev*100 : r.qty/maxQty*100;
+    return `<tr>
+      <td style="color:var(--t3);font-size:10px;width:20px">${i+1}</td>
       <td class="tl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</td>
-      <td class="mn">${isRev?fmt(r.rev):`${r.qty}件`}</td>
-      <td style="min-width:60px"><div style="height:4px;background:var(--s4);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:4px;background:${i<3?'var(--amb)':'var(--blue)'};border-radius:2px"></div></div></td></tr>`;
+      <td class="mn">${isRev?fmt(r.rev):r.qty+'件'}</td>
+      <td style="width:80px">
+        <div style="height:4px;background:var(--s4);border-radius:2px">
+          <div style="height:4px;width:${pct.toFixed(0)}%;background:${isRev?'var(--grn)':'var(--blue)'};border-radius:2px"></div>
+        </div>
+      </td></tr>`;
   };
 
-  document.getElementById('tProdQty').innerHTML=
-    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售量</th><th></th></tr></thead><tbody>`+
+  if(rows.length===0){
+    const msg = '<tr><td colspan="4" style="color:var(--t3);padding:16px;text-align:center">此時段無商品資料（動態資料從3/24起）</td></tr>';
+    const tq=document.getElementById('tProdQty'); if(tq) tq.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>'+msg+'</tbody>';
+    const tr=document.getElementById('tProdRev'); if(tr) tr.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>'+msg+'</tbody>';
+    return;
+  }
+
+  const tq=document.getElementById('tProdQty');
+  if(tq) tq.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>數量</th><th></th></tr></thead><tbody>'+
     byQty.map((r,i)=>pRow(i,r,r.qty,false)).join('')+'</tbody>';
-  document.getElementById('tProdRev').innerHTML=
-    `<thead><tr><th></th><th class="tl">商品（基本名）</th><th>銷售額</th><th></th></tr></thead><tbody>`+
+
+  const tr=document.getElementById('tProdRev');
+  if(tr) tr.innerHTML='<thead><tr><th></th><th class="tl">商品</th><th>金額</th><th></th></tr></thead><tbody>'+
     byRev.map((r,i)=>pRow(i,r,r.rev,true)).join('')+'</tbody>';
 
-  // Category pie
-  const cats = {};
+  // 品類圓餅圖
+  const byCat={};
   rows.forEach(r=>{
-    let cat='其他';
-    if(r.t.includes('乳清')) cat='乳清蛋白';
-    else if(r.t.includes('長褲')||r.t.includes('短褲')||r.t.includes('短褲')) cat='褲類';
-    else if(r.t.includes('背心')||r.t.includes('挖背')) cat='背心類';
-    else if(r.t.includes('上衣')||r.t.includes('短袖')||r.t.includes('落肩')||r.t.includes('訓練上衣')) cat='上衣類';
-    else if(r.t.includes('哥吉拉')) cat='哥吉拉聯名';
-    else if(r.t.includes('外套')||r.t.includes('夾克')||r.t.includes('襯衫')) cat='外套類';
-    else if(r.t.includes('瑜珈')||r.t.includes('蜜臀')) cat='女裝';
-    else if(r.t.includes('帽')||r.t.includes('襪')||r.t.includes('拉力帶')||r.t.includes('購物袋')) cat='配件';
-    if(!cats[cat]) cats[cat]=0;
-    cats[cat]+=r.q;
+    const cat=r.t.split('-')[0].trim().split(' ')[0]||'其他';
+    if(!byCat[cat])byCat[cat]=0;
+    byCat[cat]+=+r.q||0;
   });
-  const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
-  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff4d4d','#ff6b9d','#ffd07a'];
+  const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).slice(0,8);
+  const catClrs=['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d','#00bcd4'];
   mkChart('cProdCat',{type:'doughnut',data:{
-    labels:catKeys,
-    datasets:[{data:catKeys.map(k=>cats[k]),backgroundColor:clrs.slice(0,catKeys.length),borderWidth:0,hoverOffset:4}]
-  },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
-  plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:9},boxWidth:8}},tooltip:AX.tt}}});
+    labels:catKeys,datasets:[{data:catKeys.map(k=>byCat[k]),backgroundColor:catClrs,borderWidth:0}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+    plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:10},boxWidth:8}},
+             tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed}件`}}}}});
 
-  document.getElementById('tProdCatTbl').innerHTML=
-    `<thead><tr><th class="tl">品類</th><th>件數</th></tr></thead><tbody>`+
-    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${cats[k]}</td></tr>`).join('')+'</tbody>';
+  const tc=document.getElementById('tProdCatTbl');
+  if(tc) tc.innerHTML='<thead><tr><th class="tl">品類</th><th>數量</th></tr></thead><tbody>'+
+    catKeys.map(k=>`<tr><td class="tl">${k}</td><td class="mn">${byCat[k]}件</td></tr>`).join('')+'</tbody>';
 }
 
 // ── 來源媒介 ──
@@ -1400,7 +1419,7 @@ function drawShopify(){
     if(activePanel){
       const id = activePanel.id.replace('sh-','');
       if(id==='order') renderOrderDay();
-      else if(id==='product') renderProductRank();
+      else if(id==='product'){ if(CHARTS['cProdCat']){CHARTS['cProdCat'].destroy();delete CHARTS['cProdCat'];} renderProductRank(); }
       else if(id==='source') renderSourceRank();
       else if(id==='store') renderStore();
       else if(id==='shopee') renderShopee();
@@ -2061,7 +2080,9 @@ function renderSourceRank(){
 }
 
 function renderStore(){
-  if(CHARTS['cStorePie']) return; // already rendered
+  // 清除舊圖表以便重繪
+  if(CHARTS['cStorePie']){CHARTS['cStorePie'].destroy();delete CHARTS['cStorePie'];}
+  if(CHARTS['cStoreTrend']){CHARTS['cStoreTrend'].destroy();delete CHARTS['cStoreTrend'];}
   const dates = Object.keys(STORE_DATA).sort();
   const stores = ['高雄-夢時代','台中-新光三越中港店','新莊-宏匯廣場'];
   const storeTotal = {};
@@ -2253,10 +2274,12 @@ function adCreativeTab(id, btn) {
   if (!CREATIVE_LOADED) loadCreativeData();
 }
 
-async function loadCreativeData() {
-  if (CREATIVE_LOADED) return;
+async function loadCreativeData(forceReload=false) {
+  if (CREATIVE_LOADED && !forceReload) return;
+  CREATIVE_LOADED = false;
+  META_CREATIVE = []; GOOGLE_CREATIVE = [];
   const from = DR_CACHE?.from || '2026-03-01';
-  const to   = new Date().toISOString().slice(0,10);
+  const to   = DR_CACHE?.to   || new Date().toISOString().slice(0,10);
   const errMeta   = document.getElementById('tMetaCreativeBody');
   const errGoogle = document.getElementById('tGoogleCreativeBody');
   if(errMeta)   errMeta.innerHTML   = '<tr><td colspan="15" style="padding:16px;color:var(--t3)">資料載入中...</td></tr>';
@@ -2330,6 +2353,8 @@ async function loadCreativeData() {
 }
 
 function renderMetaCreative() {
+  const lbl = document.getElementById('metaCreativePeriod');
+  if(lbl) lbl.textContent = DR_CACHE ? `${DR_CACHE.from?.slice(5)} – ${DR_CACHE.to?.slice(5)}` : '近30天';
   const data = META_CREATIVE;
   if (!data.length) return;
   const maxSp = Math.max(...data.map(d => d.sp));
@@ -2367,6 +2392,8 @@ function renderMetaCreative() {
 }
 
 function renderGoogleCreative() {
+  const lbl = document.getElementById('googleCreativePeriod');
+  if(lbl) lbl.textContent = DR_CACHE ? `${DR_CACHE.from?.slice(5)} – ${DR_CACHE.to?.slice(5)}` : '近30天';
   const data = GOOGLE_CREATIVE;
   if (!data.length) return;
   const maxSp = Math.max(...data.map(d => d.sp));
