@@ -948,7 +948,6 @@ async function loadAllData() {
       `<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`
     ).join('');
 
-    updateStaticKPI();
     drawPage(curPage);
 
   } catch(e) {
@@ -1097,7 +1096,7 @@ function drawGA4(){
 
 function drawAds(){
   // 更新 DR_CACHE 供素材分析用
-  const d=dr(); DR_CACHE={from:d.from,to:d.to};
+  const DK_all=DK_fn(); DR_CACHE={from:DK_all[0]||'2026-03-01',to:DK_all[DK_all.length-1]||'2026-03-31'};
   CREATIVE_LOADED=false;
   META_CREATIVE=[]; GOOGLE_CREATIVE=[];
   const tp=getTPDays();
