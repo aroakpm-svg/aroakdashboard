@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AROAK 行銷報表</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090d;--s1:#0e1219;--s2:#141b24;--s3:#1a2233;--s4:#22304a;
+  --bdr:rgba(255,255,255,.06);--bdr2:rgba(255,255,255,.12);
+  --t1:#e8eef8;--t2:#7a8fa8;--t3:#3d5070;--t4:#263245;
+  --blue:#4b8eff;--cyan:#1de0c4;--grn:#28d97a;--amb:#f0a020;--red:#ff4d4d;--pur:#9d7fff;
+  --font:'DM Sans',system-ui,sans-serif;--disp:'Syne',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+body{background:var(--bg);color:var(--t1);font-family:var(--font);font-size:13px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 70% 50% at 10% 0%,rgba(75,142,255,.04) 0%,transparent 55%),
+  radial-gradient(ellipse 50% 40% at 90% 90%,rgba(29,224,196,.03) 0%,transparent 55%);
+  pointer-events:none;z-index:0}
+
+/* SETUP SCREEN */
+#setup{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center}
+.setup-box{background:var(--s1);border:1px solid var(--bdr2);border-radius:16px;padding:36px 40px;max-width:440px;width:90%}
+.setup-logo{font-family:var(--disp);font-size:22px;font-weight:800;letter-spacing:2px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.setup-sub{font-size:12px;color:var(--t3);margin-bottom:24px}
+.setup-label{font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.setup-input{width:100%;background:var(--s2);border:1px solid var(--bdr2);color:var(--t1);
+  font-size:12px;font-family:var(--mono);padding:10px 12px;border-radius:8px;outline:none;
+  transition:.15s;margin-bottom:16px}
+.setup-input:focus{border-color:var(--blue)}
+.setup-btn{width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:8px;
+  font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;transition:.15s}
+.setup-btn:hover{background:#3a7dff}
+.setup-hint{font-size:10px;color:var(--t4);margin-top:12px;line-height:1.6}
+.setup-err{font-size:11px;color:var(--red);margin-top:8px;display:none}
+
+/* TOPBAR */
+.topbar{background:rgba(14,18,25,.96);backdrop-filter:blur(20px);border-bottom:1px solid var(--bdr);
+  position:sticky;top:0;z-index:100;padding:0 24px}
+.tb{max-width:1600px;margin:0 auto;height:52px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-family:var(--disp);font-size:16px;font-weight:800;letter-spacing:2px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav{display:flex;gap:2px}
+.tab{font-family:var(--disp);font-size:11px;font-weight:700;letter-spacing:.5px;padding:6px 12px;
+  border:none;background:transparent;color:var(--t3);cursor:pointer;border-radius:6px;transition:.12s;text-transform:uppercase}
+.tab:hover{color:var(--t1);background:rgba(255,255,255,.05)}
+.tab.on{color:var(--blue);background:rgba(75,142,255,.1)}
+.tb-right{display:flex;align-items:center;gap:10px;font-size:10px;color:var(--t3)}
+.live{width:6px;height:6px;border-radius:50%;background:var(--grn);box-shadow:0 0 6px var(--grn);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.refresh-btn,.logout-btn{padding:4px 11px;border:1px solid var(--bdr);background:transparent;
+  color:var(--t3);border-radius:14px;cursor:pointer;font-family:var(--font);font-size:10px;transition:.15s}
+.refresh-btn:hover{border-color:var(--grn);color:var(--grn)}
+.logout-btn:hover{border-color:var(--red);color:var(--red)}
+.refresh-btn.spin{border-color:var(--amb);color:var(--amb);pointer-events:none}
+
+/* PERIOD BAR */
+.pbar{background:rgba(10,14,20,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdr);
+  padding:0 24px;position:sticky;top:52px;z-index:99}
+.pbar-inner{max-width:1600px;margin:0 auto;height:40px;display:flex;align-items:center;gap:4px}
+.pb{font-size:11px;padding:4px 11px;border:1px solid var(--bdr);background:transparent;
+  color:var(--t3);border-radius:14px;cursor:pointer;font-family:var(--font);transition:.12s}
+.pb:hover{border-color:var(--bdr2);color:var(--t1)}
+.pb.on{background:rgba(75,142,255,.12);border-color:rgba(75,142,255,.3);color:var(--blue);font-weight:600}
+.sep{width:1px;height:14px;background:var(--bdr);margin:0 3px}
+.period-lbl{margin-left:auto;font-size:10px;color:var(--t4);font-family:var(--mono)}
+
+/* LAYOUT */
+main{max-width:1600px;margin:0 auto;padding:20px 24px 60px;position:relative;z-index:1}
+.page{display:none}.page.on{display:block}
+
+/* LOADING */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;gap:10px;color:var(--t3)}
+.spinner{width:26px;height:26px;border:2px solid var(--bdr2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ebox{background:rgba(255,77,77,.06);border:1px solid rgba(255,77,77,.2);border-radius:8px;padding:12px 16px;font-size:11px;color:var(--red);margin:8px 0}
+
+/* CARDS */
+.sh{display:flex;align-items:center;gap:10px;margin:18px 0 10px}
+.sh h2{font-family:var(--disp);font-size:11px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--t3);white-space:nowrap}
+.shline{flex:1;height:1px;background:var(--bdr)}
+.badge{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(75,142,255,.1);border:1px solid rgba(75,142,255,.2);color:var(--blue)}
+.card{background:var(--s1);border:1px solid var(--bdr);border-radius:12px;padding:16px;margin-bottom:10px}
+.ct{font-family:var(--disp);font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--t3);margin-bottom:12px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+
+/* KPI */
+.krow{display:grid;gap:10px;margin-bottom:12px}
+.c5{grid-template-columns:repeat(5,1fr)}.c4{grid-template-columns:repeat(4,1fr)}.c3{grid-template-columns:repeat(3,1fr)}
+.kc{background:var(--s1);border:1px solid var(--bdr);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;transition:.15s}
+.kc:hover{border-color:var(--bdr2);transform:translateY(-1px)}
+.kc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0}
+.kc.cb::before{background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.kc.cg::before{background:linear-gradient(90deg,var(--grn),var(--cyan))}
+.kc.ca::before{background:linear-gradient(90deg,var(--amb),#ffd060)}
+.kc.cp::before{background:linear-gradient(90deg,var(--pur),#ff9de2)}
+.kc.cr::before{background:linear-gradient(90deg,var(--red),var(--amb))}
+.kl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px}
+.kv{font-family:var(--disp);font-size:20px;font-weight:700;line-height:1.1;margin-bottom:3px}
+.ks{font-size:10px;color:var(--t3)}
+.kbadge{position:absolute;bottom:10px;right:10px;font-size:9px;padding:2px 6px;border-radius:10px}
+.bg{background:rgba(40,217,122,.1);color:var(--grn)}.by{background:rgba(240,160,32,.1);color:var(--amb)}.br{background:rgba(255,77,77,.1);color:var(--red)}
+
+/* TABLE */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--t3);padding:6px 10px;text-align:right;border-bottom:1px solid var(--bdr);white-space:nowrap}
+th.tl{text-align:left}
+td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--bdr);color:var(--t2);font-size:11px}
+td.tl{text-align:left;color:var(--t1)}td.mn{font-family:var(--mono)}
+tr:hover td{background:var(--s2)}tr:last-child td{border-bottom:none}
+.pill{display:inline-block;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:600}
+.pg{background:rgba(40,217,122,.1);color:var(--grn)}.py{background:rgba(240,160,32,.1);color:var(--amb)}.pr{background:rgba(255,77,77,.1);color:var(--red)}
+.rbw{display:flex;align-items:center;gap:5px}.rbt{flex:1;height:4px;background:var(--s4);border-radius:2px;overflow:hidden}.rbf{height:4px;border-radius:2px}
+
+.ib{border-radius:8px;padding:10px 13px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.65;color:var(--t2)}
+.ib strong{color:var(--t1)}
+.ib.warn{background:rgba(240,160,32,.06);border:1px solid rgba(240,160,32,.15)}
+
+footer{max-width:1600px;margin:20px auto 0;padding:12px 24px;border-top:1px solid var(--bdr);display:flex;justify-content:space-between;font-size:10px;color:var(--t4)}
+@media(max-width:900px){.c5,.c4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.nav .tab{padding:5px 7px;font-size:10px}}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="setup-box">
+    <div class="setup-logo">AROAK</div>
+    <div class="setup-sub">行銷主管報表 · 請輸入 Windsor.ai API Token 開始使用</div>
+    <div class="setup-label">Windsor.ai API Token</div>
+    <input class="setup-input" id="tokenInput" type="password" placeholder="貼上你的 API Token..." autocomplete="off">
+    <button class="setup-btn" onclick="startDashboard()">進入報表 →</button>
+    <div class="setup-err" id="setupErr">Token 驗證失敗，請確認後重試</div>
+    <div class="setup-hint">Token 只儲存在你的瀏覽器 localStorage，不會傳送到任何第三方伺服器。<br>下次開啟會自動記住。</div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb">
+    <div style="display:flex;align-items:center;gap:18px">
+      <span class="logo">AROAK</span>
+      <nav class="nav">
+        <button class="tab on" onclick="goTab('overview',this)">總覽</button>
+        <button class="tab" onclick="goTab('shopify',this)">Shopify</button>
+        <button class="tab" onclick="goTab('ga4',this)">GA4</button>
+        <button class="tab" onclick="goTab('ads',this)">廣告</button>
+        <button class="tab" onclick="goTab('store',this)">門市</button>
+        <button class="tab" onclick="goTab('shopee',this)">蝦皮</button>
+      </nav>
+    </div>
+    <div class="tb-right">
+      <span class="live"></span>
+      <span id="tb-lbl">—</span>
+      <button class="refresh-btn" id="rfBtn" onclick="refreshTab()">↻ 更新</button>
+      <button class="logout-btn" onclick="logout()">登出</button>
+      <span id="tb-ts"></span>
+    </div>
+  </div>
+</div>
+
+<!-- PERIOD BAR -->
+<div class="pbar">
+  <div class="pbar-inner">
+    <button class="pb on" onclick="setPeriod('7d',this)">近7天</button>
+    <button class="pb" onclick="setPeriod('14d',this)">近14天</button>
+    <button class="pb" onclick="setPeriod('30d',this)">近30天</button>
+    <span class="sep"></span>
+    <button class="pb" onclick="setPeriod('this_month',this)">本月</button>
+    <button class="pb" onclick="setPeriod('last_month',this)">上月</button>
+    <span class="sep"></span>
+    <button class="pb" onclick="setPeriod('90d',this)">近90天</button>
+    <span class="period-lbl" id="pLbl"></span>
+  </div>
+</div>
+
+<main>
+<div class="page on" id="p-overview">
+  <div class="sh"><h2>核心指標</h2><div class="shline"></div><span class="badge" id="b-ov">—</span></div>
+  <div class="krow c5" id="kpi-ov"></div>
+  <div class="g2">
+    <div class="card"><div class="ct">日銷售走勢</div><div style="height:200px"><canvas id="cSales"></canvas></div></div>
+    <div class="card"><div class="ct">廣告 ROAS（FB 7d_click vs Google）</div><div style="height:200px"><canvas id="cRoas"></canvas></div></div>
+  </div>
+</div>
+
+<div class="page" id="p-shopify">
+  <div class="sh"><h2>Shopify 銷售</h2><div class="shline"></div><span class="badge" id="b-sh">—</span></div>
+  <div class="krow c4" id="kpi-sh"></div>
+  <div class="card"><div class="ct">日銷售明細</div>
+    <div class="tw" style="max-height:380px;overflow-y:auto"><table id="tSh"></table></div></div>
+</div>
+
+<div class="page" id="p-ga4">
+  <div class="sh"><h2>GA4 分析</h2><div class="shline"></div><span class="badge" id="b-ga4">—</span></div>
+  <div class="krow c4" id="kpi-ga4"></div>
+  <div class="g2">
+    <div class="card"><div class="ct">Sessions + 購買走勢</div><div style="height:200px"><canvas id="cGA4"></canvas></div></div>
+    <div class="card"><div class="ct">來源媒介（依購買數）</div>
+      <div class="tw" style="max-height:240px;overflow-y:auto"><table id="tGA4Src"></table></div></div>
+  </div>
+</div>
+
+<div class="page" id="p-ads">
+  <div class="sh"><h2>廣告成效</h2><div class="shline"></div><span class="badge" id="b-ads">—</span></div>
+  <div class="krow c4" id="kpi-ads"></div>
+  <div class="g2">
+    <div class="card"><div class="ct" style="color:var(--blue)">Meta 廣告活動</div>
+      <div class="tw" style="max-height:260px;overflow-y:auto"><table id="tFB"></table></div></div>
+    <div class="card"><div class="ct" style="color:var(--amb)">Google Ads 活動</div>
+      <div class="tw" style="max-height:260px;overflow-y:auto"><table id="tGA"></table></div></div>
+  </div>
+  <div class="card"><div class="ct">ROAS 走勢</div><div style="height:180px"><canvas id="cAdsRoas"></canvas></div></div>
+</div>
+
+<div class="page" id="p-store">
+  <div class="sh"><h2>門市業績</h2><div class="shline"></div><span class="badge">POS</span></div>
+  <div class="krow c3" id="kpi-store"></div>
+  <div class="g2">
+    <div class="card"><div class="ct">各門市走勢</div><div style="height:220px"><canvas id="cStore"></canvas></div></div>
+    <div class="card"><div class="ct">門市日別明細</div>
+      <div class="tw" style="max-height:240px;overflow-y:auto"><table id="tStore"></table></div></div>
+  </div>
+  <div class="ib warn"><span>⚠️</span><div>Windsor POS 資料從 2026/03/20 起才有門市綁定。</div></div>
+</div>
+
+<div class="page" id="p-shopee">
+  <div class="sh"><h2>蝦皮（Google Sheets）</h2><div class="shline"></div><span class="badge" id="b-sp">—</span></div>
+  <div class="krow c4" id="kpi-sp"></div>
+  <div class="g2">
+    <div class="card"><div class="ct">口味銷量排行</div><div style="height:220px"><canvas id="cFlav"></canvas></div></div>
+    <div class="card"><div class="ct">月度趨勢</div><div style="height:220px"><canvas id="cSpMonth"></canvas></div></div>
+  </div>
+  <div class="card"><div class="ct">最新訂單 <span style="font-weight:400;font-size:10px;color:var(--t4)">數量 ≥ 6</span></div>
+    <div class="tw" style="max-height:240px;overflow-y:auto"><table id="tSp"></table></div></div>
+</div>
+</main>
+<footer>
+  <span>AROAK 行銷主管報表 · Windsor.ai 直連版</span>
+  <span id="fts">—</span>
+</footer>
+
+<script>
+// ═══════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════
+const WINDSOR = 'https://connectors.windsor.ai/';
+const ACC = {
+  shopify : 'aroak-official.myshopify.com',
+  ga4     : '277939950',
+  fb      : '504406389075143',
+  gads    : '954-881-9890',
+  sheets  : '18DOXwG81J_FqN9MyFZVewHB6iUBXrxE-iYY7vCveVJU-1764077912'
+};
+
+let TOKEN = '';
+let PERIOD = '7d';
+let TAB = 'overview';
+const CH = {};
+
+// ═══════════════════════════════════
+// SETUP / AUTH
+// ═══════════════════════════════════
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('windsor_token');
+  if (saved) { TOKEN = saved; hidSetup(); draw(TAB); }
+});
+
+async function startDashboard() {
+  const t = document.getElementById('tokenInput').value.trim();
+  if (!t) return;
+  document.getElementById('setupErr').style.display = 'none';
+  // quick test
+  try {
+    const r = await fetch(wurl('shopify','date,order_count',{accounts:ACC.shopify,date_from:'2026-03-29',date_to:'2026-03-29'}));
+    if (!r.ok) throw new Error('bad');
+    TOKEN = t;
+    localStorage.setItem('windsor_token', t);
+    hidSetup();
+    draw(TAB);
+  } catch(e) {
+    document.getElementById('setupErr').style.display = 'block';
+  }
+}
+
+function hidSetup() { document.getElementById('setup').style.display = 'none'; }
+function logout() { localStorage.removeItem('windsor_token'); location.reload(); }
+
+// ═══════════════════════════════════
+// UTILS
+// ═══════════════════════════════════
+const fmt  = v => 'NT$' + Math.round(v||0).toLocaleString();
+const fmtK = v => { const n=Math.round((v||0)/1000); return n>=1000?'NT$'+Math.round(n/1000)+'M':'NT$'+n+'K'; };
+const AX = {
+  t:{color:'#3d5070',font:{size:10}},
+  g:'rgba(255,255,255,.04)',
+  tt:{backgroundColor:'rgba(10,14,20,.97)',borderColor:'rgba(255,255,255,.08)',borderWidth:1,padding:10}
+};
+function mkChart(id,cfg){if(CH[id])CH[id].destroy();const el=document.getElementById(id);if(!el)return;CH[id]=new Chart(el,cfg);}
+function loading(id){document.getElementById(id).innerHTML='<div class="loading"><div class="spinner"></div><span>載入中...</span></div>';}
+function err(id,msg){document.getElementById(id).innerHTML=`<div class="ebox">⚠️ ${msg}</div>`;}
+
+function dr(){
+  const t=new Date(), fmt=d=>d.toISOString().slice(0,10);
+  const add=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+  if(PERIOD.endsWith('d')){const n=parseInt(PERIOD);const s=add(t,-(n-1));return{from:fmt(s),to:fmt(t),label:`近${n}天 (${fmt(s).slice(5)}–${fmt(t).slice(5)})`};}
+  if(PERIOD==='this_month'){const s=new Date(t.getFullYear(),t.getMonth(),1);return{from:fmt(s),to:fmt(t),label:`本月 (${fmt(s).slice(5)}–今天)`};}
+  if(PERIOD==='last_month'){const s=new Date(t.getFullYear(),t.getMonth()-1,1);const e=new Date(t.getFullYear(),t.getMonth(),0);return{from:fmt(s),to:fmt(e),label:`上月 (${fmt(s).slice(5)}–${fmt(e).slice(5)})`};}
+  if(PERIOD==='90d'){const s=add(t,-89);return{from:fmt(s),to:fmt(t),label:'近90天'};}
+  const s=add(t,-6);return{from:fmt(s),to:fmt(t),label:`近7天 (${fmt(s).slice(5)}–${fmt(t).slice(5)})`};
+}
+
+// ═══════════════════════════════════
+// WINDSOR API — 直接從瀏覽器呼叫
+// ═══════════════════════════════════
+function wurl(connector, fields, extra={}) {
+  const p = new URLSearchParams();
+  p.set('api_key', TOKEN);
+  String(fields).split(',').forEach(f=>{const t=f.trim();if(t)p.append('fields',t);});
+  if(extra.accounts) String(extra.accounts).split(',').forEach(a=>{const t=a.trim();if(t)p.append('accounts',t);});
+  if(extra.date_from) p.set('date_from', extra.date_from);
+  if(extra.date_to)   p.set('date_to',   extra.date_to);
+  if(extra.filters)   p.set('filters',   String(extra.filters));
+  if(extra.options)   p.set('options',   String(extra.options));
+  return `${WINDSOR}${connector}?${p}`;
+}
+
+async function w(connector, fields, extra={}) {
+  const d = dr();
+  const opts = {
+    ...extra,
+    date_from: extra.date_from || (extra.skipDates ? undefined : d.from),
+    date_to:   extra.date_to   || (extra.skipDates ? undefined : d.to),
+  };
+  const res = await fetch(wurl(connector, fields, opts));
+  if(!res.ok) throw new Error(`Windsor ${res.status}`);
+  const j = await res.json();
+  // Aggregate Shopify (逐筆訂單 → 按日彙總)
+  const rows = j.data || j || [];
+  if(extra.aggByDate && connector==='shopify') return aggShopify(rows);
+  if(extra.aggByDate && connector==='google_ads') return aggGA(rows);
+  if(extra.aggByDate && connector==='googleanalytics4') return aggGA4(rows);
+  if(extra.aggFBDate) return aggFBDate(rows);
+  if(extra.aggFBCamp) return aggFBCamp(rows);
+  if(extra.aggGACamp) return aggGACamp(rows);
+  if(extra.aggStore)  return aggStore(rows);
+  return rows;
+}
+
+// Aggregation helpers
+function aggShopify(rows){
+  const m={};
+  rows.forEach(r=>{const d=r.date;if(!d)return;if(!m[d])m[d]={date:d,sales:0,cnt:0};m[d].sales+=+r.order_net_sales||0;m[d].cnt+=+r.order_count||0;});
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function aggGA(rows){
+  const m={};
+  rows.forEach(r=>{const d=r.date;if(!d)return;if(!m[d])m[d]={date:d,cost:0,rev:0};m[d].cost+=+r.cost||0;m[d].rev+=+r.conversions_value||0;});
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function aggGA4(rows){
+  const m={};
+  rows.forEach(r=>{const d=r.date;if(!d)return;if(!m[d])m[d]={date:d,s:0,atc:0,tx:0,rev:0};m[d].s+=+r.sessions||0;m[d].atc+=+r.add_to_carts||0;m[d].tx+=+r.transactions||0;m[d].rev+=+r.purchase_revenue||0;});
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function aggFBDate(rows){
+  const m={};
+  rows.forEach(r=>{const d=r.date;if(!d)return;if(!m[d])m[d]={date:d,sp:0,roasW:0,spW:0};const sp=+r.spend||0;m[d].sp+=sp;const roas=Array.isArray(r.purchase_roas)?(+(r.purchase_roas.find(x=>x['7d_click'])?.['7d_click']||0)):+r.purchase_roas||0;m[d].roasW+=sp*roas;m[d].spW+=sp;});
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date)).map(r=>({date:r.date,sp:r.sp,roas:r.spW?r.roasW/r.spW:0}));
+}
+function aggFBCamp(rows){
+  const m={};
+  rows.forEach(r=>{if(!(+r.spend>0))return;const k=r.campaign_name||'?';if(!m[k])m[k]={n:k,sp:0,roasW:0,spW:0,pur:0};const sp=+r.spend||0;m[k].sp+=sp;const roas=Array.isArray(r.purchase_roas)?(+(r.purchase_roas.find(x=>x['7d_click'])?.['7d_click']||0)):+r.purchase_roas||0;m[k].roasW+=sp*roas;m[k].spW+=sp;if(Array.isArray(r.actions)){const pa=r.actions.find(a=>a.action_type==='purchase');m[k].pur+=+(pa?.['7d_click']||0);}});
+  return Object.values(m).map(r=>({...r,roas:r.spW?r.roasW/r.spW:0})).sort((a,b)=>b.roas-a.roas);
+}
+function aggGACamp(rows){
+  const m={};
+  rows.forEach(r=>{if(!(+r.cost>0))return;const k=r.campaign_name||'?';if(!m[k])m[k]={n:k,sp:0,rev:0};m[k].sp+=+r.cost||0;m[k].rev+=+r.conversions_value||0;});
+  return Object.values(m).map(r=>({...r,roas:r.sp?r.rev/r.sp:0})).sort((a,b)=>b.roas-a.roas);
+}
+function aggStore(rows){
+  const m={};
+  rows.forEach(r=>{const k=r.date+'||'+(r.order_retail_location_name||'');if(!m[k])m[k]={date:r.date,store:r.order_retail_location_name||'',sales:0};m[k].sales+=+r.order_net_sales||0;});
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+// ═══════════════════════════════════
+// NAV
+// ═══════════════════════════════════
+function goTab(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('on');
+  btn.classList.add('on');
+  TAB=id; draw(id);
+}
+function setPeriod(m,btn){
+  PERIOD=m;
+  document.querySelectorAll('.pb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  draw(TAB);
+}
+async function refreshTab(){
+  const b=document.getElementById('rfBtn');b.classList.add('spin');b.textContent='↻ 更新中';
+  await draw(TAB);
+  b.classList.remove('spin');b.textContent='↻ 更新';
+  const n=new Date();document.getElementById('tb-ts').textContent=n.toLocaleTimeString('zh-TW');
+}
+async function draw(tab){
+  const d=dr();
+  document.getElementById('pLbl').textContent=d.label;
+  document.getElementById('tb-lbl').textContent=d.label;
+  if(tab==='overview') await drawOverview();
+  else if(tab==='shopify') await drawShopify();
+  else if(tab==='ga4') await drawGA4();
+  else if(tab==='ads') await drawAds();
+  else if(tab==='store') await drawStore();
+  else if(tab==='shopee') await drawShopee();
+}
+
+// ═══════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════
+async function drawOverview(){
+  const d=dr();
+  document.getElementById('b-ov').textContent=d.label;
+  loading('kpi-ov');
+  try{
+    const [shD,fbD,gaD,ga4D]=await Promise.all([
+      w('shopify','date,order_net_sales,order_count',{accounts:ACC.shopify,aggByDate:true}),
+      w('facebook','date,spend,purchase_roas',{accounts:ACC.fb,options:'{"attribution_window":"7d_click"}',aggFBDate:true}),
+      w('google_ads','date,cost,conversions_value',{accounts:ACC.gads,aggByDate:true}),
+      w('googleanalytics4','date,sessions,transactions,purchase_revenue,add_to_carts',{accounts:ACC.ga4,aggByDate:true}),
+    ]);
+    const days={};
+    shD.forEach(r=>{days[r.date]??={sales:0,cnt:0,fbSp:0,fbR:0,gaSp:0,gaR:0,s:0,tx:0,rev:0,atc:0};days[r.date].sales=r.sales;days[r.date].cnt=r.cnt;});
+    fbD.forEach(r=>{days[r.date]??={sales:0,cnt:0,fbSp:0,fbR:0,gaSp:0,gaR:0,s:0,tx:0,rev:0,atc:0};days[r.date].fbSp=r.sp;days[r.date].fbR=r.roas;});
+    gaD.forEach(r=>{days[r.date]??={sales:0,cnt:0,fbSp:0,fbR:0,gaSp:0,gaR:0,s:0,tx:0,rev:0,atc:0};days[r.date].gaSp=r.cost;days[r.date].gaR=r.rev;});
+    ga4D.forEach(r=>{days[r.date]??={sales:0,cnt:0,fbSp:0,fbR:0,gaSp:0,gaR:0,s:0,tx:0,rev:0,atc:0};days[r.date].s=r.s;days[r.date].tx=r.tx;days[r.date].rev=r.rev;days[r.date].atc=r.atc;});
+    const sorted=Object.keys(days).sort();
+    const N=sorted.length||1;
+    const tot=k=>sorted.reduce((s,d)=>s+(days[d][k]||0),0);
+    const totSales=tot('sales'),totFbSp=tot('fbSp'),totGaSp=tot('gaSp'),totSess=tot('s'),totTx=tot('tx'),totAtc=tot('atc');
+    const totFbR=sorted.reduce((s,d)=>s+(days[d].fbSp||0)*(days[d].fbR||0),0);
+    const totGaR=tot('gaR');
+    const fbR=totFbSp?totFbR/totFbSp:0, gaR=totGaSp?totGaR/totGaSp:0;
+    const cvr=totSess?(totTx/totSess*100).toFixed(2):'—';
+    document.getElementById('kpi-ov').innerHTML=[
+      {c:'cb',l:'Shopify 淨銷售',v:fmtK(totSales),s:`日均 ${fmtK(totSales/N)} · 目標 NT$200K`,b:totSales/N>=200000?'<span class="kbadge bg">達標</span>':`<span class="kbadge by">達成 ${(totSales/N/200000*100).toFixed(0)}%</span>`},
+      {c:'cg',l:'GA4 購買收益',v:fmtK(tot('rev')),s:`${totTx}筆 · CVR ${cvr}%`,b:''},
+      {c:'cp',l:'Sessions',v:totSess.toLocaleString(),s:`ATC ${totAtc.toLocaleString()} (${totSess?(totAtc/totSess*100).toFixed(1):0}%)`,b:''},
+      {c:'ca',l:'廣告花費',v:fmtK(totFbSp+totGaSp),s:`FB ${fmtK(totFbSp)} ${fbR.toFixed(2)}x · GA ${fmtK(totGaSp)} ${gaR.toFixed(2)}x`,b:''},
+      {c:'cr',l:'棄車數',v:(totAtc-totTx).toLocaleString(),s:`加購${totAtc}→購買${totTx}`,b:`<span class="kbadge br">棄車 ${totAtc?Math.round((totAtc-totTx)/totAtc*100):0}%</span>`},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cg'?'grn':k.c==='cp'?'pur':k.c==='ca'?'amb':'red'})">${k.v}</div><div class="ks">${k.s}</div>${k.b}</div>`).join('');
+    mkChart('cSales',{type:'bar',data:{labels:sorted.map(d=>d.slice(5)),datasets:[{data:sorted.map(d=>days[d].sales||0),backgroundColor:sorted.map(d=>(days[d].sales||0)>=200000?'rgba(40,217,122,.7)':'rgba(75,142,255,.5)'),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+    mkChart('cRoas',{type:'line',data:{labels:sorted.map(d=>d.slice(5)),datasets:[{label:'FB ROAS(7d)',data:sorted.map(d=>days[d].fbR||null),borderColor:'#4b8eff',backgroundColor:'transparent',tension:.3,pointRadius:2,borderWidth:2},{label:'Google ROAS',data:sorted.map(d=>days[d].gaSp?(days[d].gaR/days[d].gaSp):null),borderColor:'#f0a020',backgroundColor:'transparent',tension:.3,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+  }catch(e){err('kpi-ov',e.message);}
+}
+
+// ═══════════════════════════════════
+// SHOPIFY
+// ═══════════════════════════════════
+async function drawShopify(){
+  const d=dr();document.getElementById('b-sh').textContent=d.label;loading('kpi-sh');
+  try{
+    const data=await w('shopify','date,order_net_sales,order_count',{accounts:ACC.shopify,aggByDate:true});
+    const N=data.length||1;
+    const tot=data.reduce((s,r)=>s+r.sales,0);
+    const avg=tot/N;
+    const maxR=data.reduce((a,b)=>a.sales>b.sales?a:b,data[0]||{sales:0,date:'—'});
+    const totCnt=data.reduce((s,r)=>s+r.cnt,0);
+    document.getElementById('kpi-sh').innerHTML=[
+      {c:'cb',l:'期間淨銷售',v:fmtK(tot),s:`日均 ${fmtK(avg)}`},
+      {c:'cg',l:'總訂單數',v:totCnt.toLocaleString(),s:`日均 ${(totCnt/N).toFixed(1)}筆`},
+      {c:'ca',l:'日均客單價',v:fmt(tot/Math.max(totCnt,1)),s:'淨銷售÷訂單數'},
+      {c:'cp',l:'最高單日',v:fmtK(maxR.sales),s:maxR.date?.slice(5)||'—'},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cg'?'grn':k.c==='ca'?'amb':'pur'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+    document.getElementById('tSh').innerHTML=
+      `<thead><tr><th class="tl">日期</th><th>淨銷售</th><th>訂單</th><th>客單價</th><th>vs日均</th><th>KPI%</th></tr></thead><tbody>`+
+      [...data].reverse().map(r=>{const diff=((r.sales/avg-1)*100).toFixed(0);return`<tr><td class="tl mn" style="color:var(--t3)">${r.date}</td><td class="mn" style="color:${r.sales>=200000?'var(--grn)':r.sales>=100000?'var(--t1)':'var(--red)'}">${fmt(r.sales)}</td><td class="mn">${Math.round(r.cnt)}</td><td class="mn">${fmt(r.cnt?r.sales/r.cnt:0)}</td><td><span class="pill ${r.sales>=avg?'pg':'pr'}">${r.sales>=avg?'+':''}${diff}%</span></td><td><span class="pill ${r.sales>=200000?'pg':r.sales>=100000?'py':'pr'}">${(r.sales/200000*100).toFixed(0)}%</span></td></tr>`;}).join('')+'</tbody>';
+  }catch(e){err('kpi-sh',e.message);}
+}
+
+// ═══════════════════════════════════
+// GA4
+// ═══════════════════════════════════
+async function drawGA4(){
+  const d=dr();document.getElementById('b-ga4').textContent=d.label;loading('kpi-ga4');
+  try{
+    const [daily,src]=await Promise.all([
+      w('googleanalytics4','date,sessions,add_to_carts,transactions,purchase_revenue',{accounts:ACC.ga4,aggByDate:true}),
+      w('googleanalytics4','source,medium,sessions,transactions,purchase_revenue',{accounts:ACC.ga4}),
+    ]);
+    const N=daily.length||1;
+    const totS=daily.reduce((s,r)=>s+r.s,0),totTx=daily.reduce((s,r)=>s+r.tx,0),totAtc=daily.reduce((s,r)=>s+r.atc,0),totRev=daily.reduce((s,r)=>s+r.rev,0);
+    document.getElementById('kpi-ga4').innerHTML=[
+      {c:'cb',l:'Sessions',v:totS.toLocaleString(),s:`日均 ${Math.round(totS/N).toLocaleString()}`},
+      {c:'cg',l:'購買收益',v:fmtK(totRev),s:`${totTx}筆訂單`},
+      {c:'cp',l:'轉換率',v:totS?(totTx/totS*100).toFixed(2)+'%':'—',s:`ATC率 ${totS?(totAtc/totS*100).toFixed(1):0}%`},
+      {c:'cr',l:'棄車率',v:totAtc?Math.round((totAtc-totTx)/totAtc*100)+'%':'—',s:`${(totAtc-totTx).toLocaleString()} 次`},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cg'?'grn':k.c==='cp'?'pur':'red'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+    mkChart('cGA4',{type:'line',data:{labels:daily.map(r=>r.date.slice(5)),datasets:[{label:'Sessions',data:daily.map(r=>r.s),borderColor:'#9d7fff',backgroundColor:'transparent',tension:.3,pointRadius:2,borderWidth:2,yAxisID:'y'},{label:'購買',data:daily.map(r=>r.tx),borderColor:'#28d97a',backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'},position:'left'},y2:{ticks:AX.t,grid:{display:false},border:{color:'transparent'},position:'right'}}}});
+    const srcArr=src.filter(r=>+r.transactions>0).map(r=>({src:`${r.source}/${r.medium}`,s:+r.sessions||0,tx:+r.transactions||0,rev:+r.purchase_revenue||0})).sort((a,b)=>b.tx-a.tx).slice(0,15);
+    document.getElementById('tGA4Src').innerHTML=`<thead><tr><th class="tl">來源/媒介</th><th>Sessions</th><th>購買</th><th>轉換率</th><th>收益</th></tr></thead><tbody>`+srcArr.map(r=>{const c=(r.s?r.tx/r.s*100:0).toFixed(2);return`<tr><td class="tl">${r.src}</td><td class="mn">${r.s.toLocaleString()}</td><td class="mn">${r.tx}</td><td><span class="pill ${c>=3?'pg':c>=1?'py':'pr'}">${c}%</span></td><td class="mn">${fmt(r.rev)}</td></tr>`;}).join('')+'</tbody>';
+  }catch(e){err('kpi-ga4',e.message);}
+}
+
+// ═══════════════════════════════════
+// ADS
+// ═══════════════════════════════════
+async function drawAds(){
+  const d=dr();document.getElementById('b-ads').textContent=d.label;loading('kpi-ads');
+  try{
+    const [fbC,gaC,fbD,gaD]=await Promise.all([
+      w('facebook','campaign_name,spend,purchase_roas,actions',{accounts:ACC.fb,options:'{"attribution_window":"7d_click"}',aggFBCamp:true}),
+      w('google_ads','campaign_name,cost,conversions_value',{accounts:ACC.gads,aggGACamp:true}),
+      w('facebook','date,spend,purchase_roas',{accounts:ACC.fb,options:'{"attribution_window":"7d_click"}',aggFBDate:true}),
+      w('google_ads','date,cost,conversions_value',{accounts:ACC.gads,aggByDate:true}),
+    ]);
+    const totFbSp=fbC.reduce((s,r)=>s+r.sp,0),totFbR=fbC.reduce((s,r)=>s+r.sp*r.roas,0);
+    const totGaSp=gaC.reduce((s,r)=>s+r.sp,0),totGaR=gaC.reduce((s,r)=>s+r.rev,0);
+    const fbR=totFbSp?totFbR/totFbSp:0,gaR=totGaSp?totGaR/totGaSp:0;
+    document.getElementById('kpi-ads').innerHTML=[
+      {c:'cb',l:'FB 廣告花費',v:fmtK(totFbSp),s:`加權 ROAS ${fbR.toFixed(2)}x (7d_click)`},
+      {c:'ca',l:'Google 花費',v:fmtK(totGaSp),s:`加權 ROAS ${gaR.toFixed(2)}x`},
+      {c:'cg',l:'廣告合計',v:fmtK(totFbSp+totGaSp),s:'FB + Google'},
+      {c:'cp',l:'整合 ROAS',v:((totFbR+totGaR)/(totFbSp+totGaSp||1)).toFixed(2)+'x',s:'全廣告加權'},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='ca'?'amb':k.c==='cg'?'grn':'pur'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+    document.getElementById('tFB').innerHTML=`<thead><tr><th class="tl">活動</th><th>花費</th><th>購買</th><th>ROAS</th></tr></thead><tbody>`+fbC.map(r=>`<tr><td class="tl" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.n}</td><td class="mn">${fmtK(r.sp)}</td><td class="mn">${Math.round(r.pur)||'—'}</td><td><div class="rbw"><div class="rbt"><div class="rbf" style="width:${Math.min(r.roas/8*100,100)}%;background:${r.roas>=3.5?'var(--grn)':r.roas>=2?'var(--amb)':'var(--red)'}"></div></div><span style="font-family:var(--mono);font-size:11px;width:36px">${r.roas.toFixed(2)}x</span></div></td></tr>`).join('')+'</tbody>';
+    document.getElementById('tGA').innerHTML=`<thead><tr><th class="tl">活動</th><th>花費</th><th>轉換值</th><th>ROAS</th></tr></thead><tbody>`+gaC.map(r=>`<tr><td class="tl" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.n}</td><td class="mn">${fmtK(r.sp)}</td><td class="mn">${fmtK(r.rev)}</td><td><div class="rbw"><div class="rbt"><div class="rbf" style="width:${Math.min(r.roas/10*100,100)}%;background:${r.roas>=4?'var(--grn)':r.roas>=2?'var(--amb)':'var(--red)'}"></div></div><span style="font-family:var(--mono);font-size:11px;width:36px">${r.roas.toFixed(2)}x</span></div></td></tr>`).join('')+'</tbody>';
+    const allD=[...new Set([...fbD.map(r=>r.date),...gaD.map(r=>r.date)])].sort();
+    const fbd={},gad={};fbD.forEach(r=>fbd[r.date]=r.roas);gaD.forEach(r=>gad[r.date]={sp:r.cost,rv:r.rev});
+    mkChart('cAdsRoas',{type:'line',data:{labels:allD.map(d=>d.slice(5)),datasets:[{label:'FB ROAS(7d)',data:allD.map(d=>fbd[d]||null),borderColor:'#4b8eff',backgroundColor:'transparent',tension:.3,pointRadius:2,borderWidth:2},{label:'Google ROAS',data:allD.map(d=>gad[d]?.sp?(gad[d].rv/gad[d].sp):null),borderColor:'#f0a020',backgroundColor:'transparent',tension:.3,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+  }catch(e){err('kpi-ads',e.message);}
+}
+
+// ═══════════════════════════════════
+// STORE
+// ═══════════════════════════════════
+async function drawStore(){
+  loading('kpi-store');
+  try{
+    const data=await w('shopify','date,order_retail_location_name,order_net_sales',{accounts:ACC.shopify,filters:'[["order_retail_location_name","notnull",null]]',aggStore:true});
+    const byDate={},byStore={};
+    data.forEach(r=>{if(!byDate[r.date])byDate[r.date]={};byDate[r.date][r.store]=(byDate[r.date][r.store]||0)+r.sales;byStore[r.store]=(byStore[r.store]||0)+r.sales;});
+    const stores=Object.keys(byStore),dates=Object.keys(byDate).sort();
+    const grand=Object.values(byStore).reduce((s,v)=>s+v,0);
+    const topD=dates.reduce((a,b)=>Object.values(byDate[a]||{}).reduce((s,v)=>s+v,0)>Object.values(byDate[b]||{}).reduce((s,v)=>s+v,0)?a:b,dates[0]);
+    document.getElementById('kpi-store').innerHTML=[
+      {c:'cb',l:'門市合計',v:fmtK(grand),s:`${dates.length}天有資料`},
+      {c:'cg',l:'最高單日',v:fmtK(Object.values(byDate[topD]||{}).reduce((s,v)=>s+v,0)),s:topD||'—'},
+      {c:'ca',l:'門市數',v:stores.length+'間',s:stores.map(s=>s.split('-')[1]||s).join(' · ')},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cg'?'grn':'amb'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+    const clrs=['#f0a020','#28d97a','#9d7fff'];
+    mkChart('cStore',{type:'bar',data:{labels:dates.map(d=>d.slice(5)),datasets:stores.map((s,i)=>({label:s.split('-')[1]||s,data:dates.map(d=>(byDate[d]&&byDate[d][s])||0),backgroundColor:clrs[i%3]+'99',borderColor:clrs[i%3],borderWidth:1,borderRadius:3}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+    document.getElementById('tStore').innerHTML=`<thead><tr><th class="tl">日期</th>${stores.map(s=>`<th>${s.split('-')[1]||s}</th>`).join('')}<th>合計</th></tr></thead><tbody>`+[...dates].reverse().map(d=>{const tot=Object.values(byDate[d]||{}).reduce((s,v)=>s+v,0);return`<tr><td class="tl mn" style="color:var(--t3)">${d}</td>${stores.map(s=>`<td class="mn">${byDate[d]?.[s]?fmt(byDate[d][s]):'—'}</td>`).join('')}<td class="mn" style="font-weight:600">${fmt(tot)}</td></tr>`;}).join('')+'</tbody>';
+  }catch(e){err('kpi-store',e.message);}
+}
+
+// ═══════════════════════════════════
+// SHOPEE
+// ═══════════════════════════════════
+async function drawShopee(){
+  document.getElementById('b-sp').textContent='2025/03 – 今天（批量≥6）';loading('kpi-sp');
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const data=await w('googlesheets','建立時間,商品資訊,小計數量,商品小計',{accounts:ACC.sheets,filters:'[["小計數量","gt",5]]',date_from:'2025-03-01',date_to:today,skipDates:true});
+    const flv={},mon={};let totQ=0,totR=0;
+    data.forEach(r=>{
+      const q=+r['小計數量']||0,rev=parseFloat(String(r['商品小計']||0).replace(/[^0-9.]/g,''))||0,nm=r['商品資訊']||'',dt=String(r['建立時間']||'');
+      totQ+=q;totR+=rev;
+      let f='其他';for(const x of['生巧克力','優格多多','草莓','抹茶那堤','醇濃奶茶','焦糖海鹽'])if(nm.includes(x)){f=x;break;}
+      flv[f]??={q:0,r:0};flv[f].q+=q;flv[f].r+=rev;
+      const ym=dt.slice(0,7).replace('/','-');if(ym&&ym.length===7){mon[ym]??={q:0,r:0};mon[ym].q+=q;mon[ym].r+=rev;}
+    });
+    const topF=Object.entries(flv).sort((a,b)=>b[1].q-a[1].q)[0];
+    const latM=Object.keys(mon).sort().slice(-1)[0];
+    document.getElementById('kpi-sp').innerHTML=[
+      {c:'cb',l:'批量累計金額',v:fmtK(totR),s:`${totQ}包/件`},
+      {c:'cp',l:'最暢銷口味',v:topF?.[0]||'—',s:`${topF?.[1]?.q||0}包 (${totQ?(topF[1].q/totQ*100).toFixed(0):0}%)`},
+      {c:'cg',l:'本月蝦皮',v:fmtK(mon[latM]?.r||0),s:`${mon[latM]?.q||0}包/件 · ${latM}`},
+      {c:'ca',l:'口味種類',v:Object.keys(flv).length+'種',s:'有銷售記錄'},
+    ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cp'?'pur':k.c==='cg'?'grn':'amb'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+    const flvArr=Object.entries(flv).sort((a,b)=>b[1].q-a[1].q);
+    const clrs=['#4b8eff','#f0a020','#28d97a','#9d7fff','#1de0c4','#ff6b9d'];
+    mkChart('cFlav',{type:'bar',data:{labels:flvArr.map(f=>f[0]),datasets:[{data:flvArr.map(f=>f[1].q),backgroundColor:clrs,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.x}包 · NT$${flvArr[ctx.dataIndex][1].r.toLocaleString()}`}}},scales:{x:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}},y:{ticks:AX.t,grid:{display:false},border:{color:'transparent'}}}}});
+    const months=Object.keys(mon).sort();
+    mkChart('cSpMonth',{type:'bar',data:{labels:months,datasets:[{data:months.map(m=>mon[m].q),backgroundColor:months.map(m=>m.startsWith('2026')?'rgba(40,217,122,.7)':'rgba(75,142,255,.5)'),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.parsed.y}件 · NT$${mon[months[ctx.dataIndex]].r.toLocaleString()}`}}},scales:{x:{ticks:{...AX.t,maxRotation:45},grid:{display:false},border:{color:'transparent'}},y:{ticks:AX.t,grid:{color:AX.g},border:{color:'transparent'}}}}});
+    document.getElementById('tSp').innerHTML=`<thead><tr><th class="tl">建立時間</th><th class="tl">商品</th><th>數量</th><th>金額</th></tr></thead><tbody>`+[...data].sort((a,b)=>String(b['建立時間']).localeCompare(String(a['建立時間']))).slice(0,40).map(r=>`<tr><td class="tl mn" style="color:var(--t3);font-size:10px">${r['建立時間']}</td><td class="tl" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['商品資訊']||''}</td><td class="mn">${r['小計數量']}</td><td class="mn">${fmt(parseFloat(String(r['商品小計']||0).replace(/[^0-9.]/g,'')))}</td></tr>`).join('')+'</tbody>';
+  }catch(e){err('kpi-sp',e.message);}
+}
+
+// ═══════════════════════════════════
+// INIT
+// ═══════════════════════════════════
+window.addEventListener('load',()=>{
+  document.getElementById('fts').textContent=`Windsor.ai 直連版 · ${new Date().toLocaleString('zh-TW')}`;
+  document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')startDashboard();});
+});
+</script>
+</body>
+</html>
