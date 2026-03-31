@@ -336,32 +336,41 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   <div id="sh-order" class="sh-panel">
     <div class="g2">
       <div class="card">
-        <div class="ct">每日訂單數 vs 銷售額 <span class="cn">3月1-30日</span></div>
+        <div class="ct">每日銷售走勢</div>
         <div style="height:200px"><canvas id="cShOrderTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="ct">官網 vs 門市 業績圓餅圖 <span class="cn">依選定時段</span></div>
+        <div style="display:flex;gap:0;align-items:center">
+          <div style="height:200px;flex:1"><canvas id="cOrderVsStore"></canvas></div>
+          <div id="orderStoreLegs" style="display:flex;flex-direction:column;gap:8px;font-size:11px;min-width:140px;padding-left:12px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="ct">官網 vs 門市 每日長條圖</div>
+        <div style="height:190px"><canvas id="cOrderVsStoreBar"></canvas></div>
       </div>
       <div class="card">
         <div class="ct">單日訂單選擇 <span class="cn">來源分布</span></div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:var(--t3)">
           選日：
           <select id="orderDayPick" onchange="renderOrderDay()" style="background:var(--s2);border:1px solid var(--bdr);color:var(--t1);font-size:11px;padding:3px 8px;border-radius:6px;font-family:var(--font);cursor:pointer">
-            <option value="2026-03-30">3/30（最新）</option><option value="2026-03-29">3/29</option><option value="2026-03-28">3/28</option><option value="2026-03-27">3/27</option>
-            <option value="2026-03-26">3/26</option><option value="2026-03-25">3/25</option>
           </select>
         </div>
-        <div style="height:155px"><canvas id="cOrderDayPie"></canvas></div>
+        <div class="g2" style="margin-bottom:0">
+          <div style="height:150px"><canvas id="cOrderDayPie"></canvas></div>
+          <div class="tw" style="max-height:150px;overflow-y:auto"><table id="tOrderDetail"></table></div>
+        </div>
       </div>
     </div>
     <div class="card">
-      <div class="ct" id="sh-tbl-title">逐日明細表</div>
-      <div class="tw" style="max-height:220px;overflow-y:auto"><table id="tShDaily"></table></div>
-    </div>
-    <div class="card">
-      <div class="ct">3/25–3/26 逐筆訂單明細 <span class="cn">含來源媒介與門市</span></div>
-      <div class="tw" style="max-height:280px;overflow-y:auto"><table id="tOrderDetail"></table></div>
+      <div id="sh-tbl-title" class="ct">每日訂單明細</div>
+      <div class="tw" style="max-height:240px;overflow-y:auto"><table id="tShDaily"></table></div>
     </div>
   </div>
 
-  <!-- SUB: 商品排行 -->
   <div id="sh-product" class="sh-panel" style="display:none">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
       <span style="font-size:10px;color:var(--t3)">選日：</span>
@@ -417,26 +426,17 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
   <div id="sh-store" class="sh-panel" style="display:none">
     <div class="g2">
       <div class="card">
-        <div class="ct">線上 vs 門市 業績圓餅圖 <span class="cn">3月累計(已知)</span></div>
-        <div style="display:flex;gap:0;align-items:center">
-          <div style="height:220px;flex:1"><canvas id="cStorePie"></canvas></div>
-          <div style="display:flex;flex-direction:column;gap:8px;font-size:11px;min-width:160px">
-            <div class="store-leg" style="--c:#4b8eff">官網(線上) NT$2,625K</div>
-            <div class="store-leg" style="--c:#f0a020">高雄夢時代 NT$148K</div>
-            <div class="store-leg" style="--c:#28d97a">新莊宏匯 NT$99K</div>
-            <div class="store-leg" style="--c:#9d7fff">台中新光 NT$143K</div>
-          </div>
-        </div>
+        <div class="ct">門市每日業績趨勢</div>
+        <div style="height:220px"><canvas id="cStoreTrend"></canvas></div>
       </div>
       <div class="card">
-        <div class="ct">門市每日業績趨勢 <span class="cn">3/20、3/25、3/26</span></div>
-        <div style="height:220px"><canvas id="cStoreTrend"></canvas></div>
+        <div class="ct">門市累計業績</div>
+        <div style="height:220px"><canvas id="cStorePie"></canvas></div>
       </div>
     </div>
     <div class="card">
-      <div class="ct">門市逐日明細 <span class="cn">含已知日期（Windsor location 資料）</span></div>
+      <div class="ct">門市逐日明細</div>
       <div class="tw"><table id="tStoreDetail"></table></div>
-      <div class="ib warn" style="margin-top:10px;margin-bottom:0"><span>⚠️</span><div>Windsor <code>order_retail_location_name</code> 綁定日期為3/20起。3月1-19日門市資料暫無，待Windsor資料補齊後可回填。</div></div>
     </div>
   </div>
 
@@ -527,6 +527,17 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
       <strong>Attribution：7d_click</strong> · 期間：<span id="metaCreativePeriod" style="color:var(--cyan)">載入中...</span> ·
       轉換率 = 購買數 / 不重複點擊數 · 依花費排序，花費 &lt; NT$500 已過濾
     </div></div>
+  <!-- Meta Top/Bottom 10 -->
+  <div class="g2" style="margin-bottom:12px">
+    <div class="card">
+      <div class="ct" style="color:var(--grn)">🏆 Meta 素材 ROAS Top 10</div>
+      <div class="tw" style="max-height:320px;overflow-y:auto"><table id="tMetaTop10"></table></div>
+    </div>
+    <div class="card">
+      <div class="ct" style="color:var(--red)">⚠️ Meta 素材 ROAS Bottom 10 <span class="cn">（花費 &gt;500 才列入）</span></div>
+      <div class="tw" style="max-height:320px;overflow-y:auto"><table id="tMetaBot10"></table></div>
+    </div>
+  </div>
     <div class="card" style="padding:0">
       <div class="tw" style="max-height:520px;overflow-y:auto">
         <table id="tMetaCreative">
@@ -570,6 +581,17 @@ footer{max-width:1680px;margin:24px auto 0;padding:14px 28px;border-top:1px soli
       <strong>Google Ads 廣告層級</strong> · 期間：<span id="googleCreativePeriod" style="color:var(--cyan)">載入中...</span> ·
       轉換率 = 轉換數 / 點擊數 · PMax 廣告名稱為 null（系統自動組合）
     </div></div>
+  <!-- Google Top/Bottom 10 -->
+  <div class="g2" style="margin-bottom:12px">
+    <div class="card">
+      <div class="ct" style="color:var(--grn)">🏆 Google 素材 ROAS Top 10</div>
+      <div class="tw" style="max-height:320px;overflow-y:auto"><table id="tGoogleTop10"></table></div>
+    </div>
+    <div class="card">
+      <div class="ct" style="color:var(--red)">⚠️ Google 素材 ROAS Bottom 10 <span class="cn">（花費 &gt;500 才列入）</span></div>
+      <div class="tw" style="max-height:320px;overflow-y:auto"><table id="tGoogleBot10"></table></div>
+    </div>
+  </div>
     <div class="card" style="padding:0">
       <div class="tw" style="max-height:520px;overflow-y:auto">
         <table id="tGoogleCreative">
@@ -1123,13 +1145,38 @@ function drawOverview(){
   document.getElementById('badge-overview').textContent=badgeText;
   document.getElementById('funnel-title').textContent=`轉換漏斗（${N}天累計）`;
 
-  document.getElementById('kpi-overview').innerHTML=[
-    {c:'cb',l:'期間淨銷售',v:fmt(totSales),s:`日均 ${fmt(Math.round(totSales/N))}`,b:''},
-    {c:'cg',l:'GA4 購買收益',v:fmt(totRev),s:`${totTx}筆訂單 · 轉換率 ${cvr}%`,b:''},
-    {c:'cp',l:'Sessions',v:totSess.toLocaleString(),s:`日均 ${Math.round(totSess/N).toLocaleString()}`,b:''},
-    {c:'ca',l:'廣告花費',v:fmt(totAd),s:`日均 ${fmt(Math.round(totAd/N))}`,b:''},
-    {c:'cr',l:'加購次數',v:totAtc.toLocaleString(),s:`ATC率 ${atcR}% · 購買 ${totTx}筆`,b:''},
-  ].map(k=>`<div class="kc ${k.c}"><div class="kl">${k.l}</div><div class="kv" style="color:var(--${k.c==='cb'?'blue':k.c==='cg'?'grn':k.c==='cp'?'pur':k.c==='ca'?'amb':'red'})">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+  document.getElementById('kpi-overview').innerHTML = (function(){
+    const KPI_ONLINE = 200000;
+    const KPI_STORE  = 30000;
+    const storeDays = Object.keys(STORE_DATA).filter(function(d){return days.indexOf(d)>=0;});
+    const totStore = storeDays.reduce(function(s,d){return s+Object.values(STORE_DATA[d]||{}).reduce(function(a,b){return a+b;},0);},0);
+    const totOnline = Math.max(0, totSales - totStore);
+    const onlineAvg = N > 0 ? totOnline / N : 0;
+    const storeAvg  = storeDays.length > 0 ? totStore / storeDays.length : 0;
+    const onlineAchv = Math.round(onlineAvg / KPI_ONLINE * 100);
+    const storeAchv  = Math.round(storeAvg  / KPI_STORE  * 100);
+    const onlineClr  = onlineAchv >= 100 ? 'pg' : onlineAchv >= 60 ? 'py' : 'pr';
+    const storeClr   = storeAchv  >= 100 ? 'pg' : storeAchv  >= 60 ? 'py' : 'pr';
+    const fbSp = days.reduce(function(s,d){return s+(FB3[d]?FB3[d].sp:0);},0);
+    const fbRw = fbSp>0 ? days.reduce(function(s,d){return s+(FB3[d]?FB3[d].sp*FB3[d].roas:0);},0)/fbSp : 0;
+    const gaSp = days.reduce(function(s,d){return s+(GAADS[d]?GAADS[d].sp:0);},0);
+    const gaRw = gaSp>0 ? days.reduce(function(s,d){return s+(GAADS[d]?GAADS[d].sp*GAADS[d].roas:0);},0)/gaSp : 0;
+    var cards = [
+      {c:'cb', l:'官網銷售',    v:fmt(totOnline), s:'日均 '+fmt(Math.round(onlineAvg))+' · 目標 '+fmt(KPI_ONLINE), badge:'達成 '+onlineAchv+'%', bc:onlineClr},
+      {c:'cr', l:'門市業績',    v:fmt(totStore),  s:'日均 '+fmt(Math.round(storeAvg))+' · 目標 '+fmt(KPI_STORE)+'/店', badge:'達成 '+storeAchv+'%', bc:storeClr},
+      {c:'cg', l:'GA4 購買收益',v:fmt(totRev),    s:totTx+'筆 · 轉換率 '+cvr+'%', badge:'', bc:''},
+      {c:'cp', l:'Sessions',    v:totSess.toLocaleString(), s:'日均 '+Math.round(totSess/N).toLocaleString(), badge:'', bc:''},
+      {c:'ca', l:'廣告花費',    v:fmt(totAd),     s:'FB '+fbRw.toFixed(2)+'x · GA '+gaRw.toFixed(2)+'x', badge:'', bc:''}
+    ];
+    var colorMap = {cb:'blue',cr:'red',cg:'grn',cp:'pur',ca:'amb'};
+    return cards.map(function(k){
+      return '<div class="kc '+k.c+'"><div class="kl">'+k.l+'</div>'+
+        '<div class="kv" style="color:var(--'+colorMap[k.c]+')">'+ k.v+'</div>'+
+        '<div class="ks">'+k.s+'</div>'+
+        (k.badge ? '<span class="kbadge '+k.bc+'">'+k.badge+'</span>' : '')+
+        '</div>';
+    }).join('');
+  })()
 
   document.getElementById('fn-sess').textContent=totSess.toLocaleString();
   document.getElementById('fn-atc').textContent=totAtc.toLocaleString();
@@ -2513,68 +2560,130 @@ function shTab(id, btn){
   else if(id==='shopee') renderShopee();
 }
 
-function renderOrderDay(){
-  const day = document.getElementById('orderDayPick').value;
-  // 用 GA4 來源資料（因為逐筆訂單來源只有近幾天）
-  const bySrc={};
-  let dayTotal=0;
-  // 先嘗試用 ORDER_SRC_RAW（動態載入的逐筆訂單）
-  if(typeof ORDER_SRC_RAW !== 'undefined' && ORDER_SRC_RAW.length>0){
-    const rows = ORDER_SRC_RAW.filter(r=>r.d===day && r.amt>0);
-    rows.forEach(r=>{if(!bySrc[r.src])bySrc[r.src]=0;bySrc[r.src]+=r.amt;dayTotal+=r.amt;});
-  } else {
-    // Fallback：用 S3 的日銷售
-    dayTotal = S3[day]||0;
-    bySrc['Shopify 銷售'] = dayTotal;
-  }
-  const srcKeys=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]);
-  const clrs=['#4b8eff','#28d97a','#f0a020','#9d7fff','#1de0c4','#ff6b9d','#ff4d4d'];
+function renderOrderDay() {
+  var day = (document.getElementById('orderDayPick') || {}).value;
+  var DK = DK_fn();
 
-  if(srcKeys.length>0){
-    mkChart('cOrderDayPie',{type:'doughnut',data:{
-      labels:srcKeys,datasets:[{data:srcKeys.map(k=>bySrc[k]),backgroundColor:clrs,borderWidth:0}]
-    },options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
-      plugins:{legend:{display:true,position:'right',labels:{color:'#7a8fa8',font:{size:10},boxWidth:8}},
-               tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
+  // 每日銷售走勢（高亮選中日）
+  mkChart('cShOrderTrend', {
+    type: 'bar',
+    data: {
+      labels: DK.map(function(d){return d.slice(5);}),
+      datasets: [{
+        data: DK.map(function(d){return S3[d]||0;}),
+        backgroundColor: DK.map(function(d){return d===day ? 'rgba(75,142,255,.9)' : 'rgba(75,142,255,.4)';}),
+        borderRadius: 3
+      }]
+    },
+    options: {responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{...AX.tt, callbacks:{label:function(ctx){return fmt(ctx.parsed.y);}}}},
+      scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},
+              y:{ticks:{callback:function(v){return fmtK(v);}, ...AX.t}, grid:{color:AX.g}, border:{color:'transparent'}}}}
+  });
+
+  // 官網 vs 門市 圓餅圖（全時段）
+  var storeDays = Object.keys(STORE_DATA).sort();
+  var stores = ['高雄-夢時代','台中-新光三越中港店','新莊-宏匯廣場'];
+  var storeClrs = {'高雄-夢時代':'#f0a020','台中-新光三越中港店':'#28d97a','新莊-宏匯廣場':'#9d7fff'};
+  var storeTotal = {};
+  stores.forEach(function(s){ storeTotal[s] = storeDays.reduce(function(sum,d){return sum+(STORE_DATA[d]&&STORE_DATA[d][s]?STORE_DATA[d][s]:0);},0); });
+  var grandStore = stores.reduce(function(s,st){return s+storeTotal[st];},0);
+  var onlineTot = Math.max(0, sumO(S3) - grandStore);
+  var allTot = grandStore + onlineTot;
+
+  var pieLabels = ['官網(線上)'].concat(stores.map(function(s){return s.split('-')[1]||s;}));
+  var pieData   = [onlineTot].concat(stores.map(function(s){return storeTotal[s]||0;}));
+  var pieClrs   = ['#4b8eff'].concat(stores.map(function(s){return storeClrs[s]||'#ccc';}));
+
+  if(CHARTS['cOrderVsStore']){CHARTS['cOrderVsStore'].destroy();delete CHARTS['cOrderVsStore'];}
+  mkChart('cOrderVsStore', {
+    type:'doughnut',
+    data:{labels:pieLabels, datasets:[{data:pieData, backgroundColor:pieClrs, borderWidth:0}]},
+    options:{responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+fmt(ctx.parsed)+' ('+(allTot?(ctx.parsed/allTot*100).toFixed(1):0)+'%)';}}}}}
+  });
+
+  // legend
+  var legsEl = document.getElementById('orderStoreLegs');
+  if(legsEl) {
+    legsEl.innerHTML = pieLabels.map(function(lbl,i){
+      return '<div style="display:flex;align-items:center;gap:6px">' +
+        '<div style="width:10px;height:10px;border-radius:2px;background:'+pieClrs[i]+';flex-shrink:0"></div>' +
+        '<span>'+lbl+'</span>' +
+        '<span style="margin-left:auto;font-family:var(--mono);font-size:10px">'+fmt(pieData[i])+'</span>' +
+        '</div>';
+    }).join('');
   }
 
-  // Trend chart（日銷售 30天）
-  const DK=DK_fn();
-  mkChart('cShOrderTrend',{type:'bar',data:{
-    labels:DK.map(d=>d.slice(5)),
-    datasets:[{data:DK.map(d=>S3[d]||0),
-      backgroundColor:DK.map(d=>d===day?'rgba(75,142,255,.9)':'rgba(75,142,255,.4)'),borderRadius:3}]
-  },options:{responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{...AX.tt,callbacks:{label:ctx=>`${fmt(ctx.parsed)}`}}},
-    scales:{x:{ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},
-            y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+  // 官網 vs 門市 每日長條圖
+  var barDays = storeDays.filter(function(d){return DK.indexOf(d)>=0;});
+  var onlineByDay = DK.map(function(d){
+    var st = storeDays.indexOf(d)>=0 ? stores.reduce(function(s,st){return s+(STORE_DATA[d]&&STORE_DATA[d][st]?STORE_DATA[d][st]:0);},0) : 0;
+    return Math.max(0,(S3[d]||0)-st);
+  });
+  var storeDatasets = stores.map(function(s){
+    return {
+      label: s.split('-')[1]||s,
+      data: DK.map(function(d){return STORE_DATA[d]&&STORE_DATA[d][s]?STORE_DATA[d][s]:0;}),
+      backgroundColor: (storeClrs[s]||'#ccc')+'99',
+      borderRadius:3, stack:'s'
+    };
+  });
+  if(CHARTS['cOrderVsStoreBar']){CHARTS['cOrderVsStoreBar'].destroy();delete CHARTS['cOrderVsStoreBar'];}
+  mkChart('cOrderVsStoreBar', {
+    type:'bar',
+    data:{labels:DK.map(function(d){return d.slice(5);}),
+      datasets:[{label:'官網',data:onlineByDay,backgroundColor:'rgba(75,142,255,.6)',borderRadius:3,stack:'s'}].concat(storeDatasets)},
+    options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},
+      scales:{x:{stacked:true,ticks:{...AX.t,maxRotation:90},grid:{display:false},border:{color:'transparent'}},
+              y:{stacked:true,ticks:{callback:function(v){return fmtK(v);}, ...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}
+  });
 
-  // Detail table（用 ORDER_CNT GA4 資料）
-  const el=document.getElementById('tShDaily');
-  if(el){
-    el.innerHTML=`<thead><tr><th class="tl">日期</th><th>Shopify 銷售</th><th>GA4 購買</th><th>GA4 收益</th><th>KPI%</th></tr></thead><tbody>`+
-    [...DK].reverse().map(d=>{
-      const v=S3[d]||0,tx=GA3[d]?.tx||0,rev=GA3[d]?.rev||0;
-      return`<tr ${d===day?'class="wk-curr"':''}><td class="tl mn" style="color:var(--t3)">${d}</td>
-        <td class="mn" style="color:${v>=200000?'var(--grn)':v>=100000?'var(--t1)':'var(--red)'}">${fmt(v)}</td>
-        <td class="mn">${tx}</td><td class="mn">${fmt(rev)}</td>
-        <td><span class="pill ${v>=200000?'pg':v>=100000?'py':'pr'}">${(v/200000*100).toFixed(0)}%</span></td></tr>`;
-    }).join('')+'</tbody>';
+  // 單日來源圓餅
+  if(day && S3[day]) {
+    var dayStore = stores.reduce(function(s,st){return s+(STORE_DATA[day]&&STORE_DATA[day][st]?STORE_DATA[day][st]:0);},0);
+    var dayOnline = Math.max(0,(S3[day]||0)-dayStore);
+    var srcData = [dayOnline];
+    var srcLabels = ['官網'];
+    stores.forEach(function(s){
+      if(STORE_DATA[day]&&STORE_DATA[day][s]>0){srcData.push(STORE_DATA[day][s]);srcLabels.push(s.split('-')[1]||s);}
+    });
+    if(CHARTS['cOrderDayPie']){CHARTS['cOrderDayPie'].destroy();delete CHARTS['cOrderDayPie'];}
+    mkChart('cOrderDayPie', {type:'doughnut', data:{labels:srcLabels,datasets:[{data:srcData,backgroundColor:['#4b8eff','#f0a020','#28d97a','#9d7fff'],borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:true,position:'right',labels:{color:'#7a8fa8',font:{size:10},boxWidth:8}},tooltip:AX.tt}}});
   }
+
+  // 每日明細表
+  var tShEl = document.getElementById('tShDaily');
+  if(tShEl) {
+    var rows = [...DK].reverse().map(function(d){
+      var v=S3[d]||0, tx=GA3[d]?GA3[d].tx:0, rev=GA3[d]?GA3[d].rev:0;
+      var badge = v>=200000?'pg':v>=100000?'py':'pr';
+      return '<tr'+(d===day?' class="wk-curr"':'')+'>'+
+        '<td class="tl mn" style="color:var(--t3)">'+d+'</td>'+
+        '<td class="mn" style="color:'+(v>=200000?'var(--grn)':v>=100000?'var(--t1)':'var(--red)')+'">'+fmt(v)+'</td>'+
+        '<td class="mn">'+tx+'</td><td class="mn">'+fmt(rev)+'</td>'+
+        '<td><span class="pill '+badge+'">'+(v/200000*100).toFixed(0)+'%</span></td></tr>';
+    }).join('');
+    tShEl.innerHTML = '<thead><tr><th class="tl">日期</th><th>銷售</th><th>GA4購買</th><th>GA4收益</th><th>KPI%</th></tr></thead><tbody>'+rows+'</tbody>';
+  }
+
   // 今日訂單明細
-  const el2=document.getElementById('tOrderDetail');
-  if(el2){
-    const v=S3[day]||0,tx=GA3[day]?.tx||0,rev=GA3[day]?.rev||0;
-    const aov=tx?Math.round(rev/tx):0;
-    el2.innerHTML=`<thead><tr><th class="tl">項目</th><th>數值</th></tr></thead><tbody>
-      <tr><td class="tl">Shopify 淨銷售</td><td class="mn" style="color:${v>=200000?'var(--grn)':'var(--t1)'}">${fmt(v)}</td></tr>
-      <tr><td class="tl">GA4 購買筆數</td><td class="mn">${tx}筆</td></tr>
-      <tr><td class="tl">GA4 購買收益</td><td class="mn">${fmt(rev)}</td></tr>
-      <tr><td class="tl">GA4 客單價</td><td class="mn">${fmt(aov)}</td></tr>
-      <tr><td class="tl">KPI 達成率</td><td class="mn"><span class="pill ${v>=200000?'pg':v>=100000?'py':'pr'}">${(v/200000*100).toFixed(1)}%</span></td></tr>
-    </tbody>`;
+  var detEl = document.getElementById('tOrderDetail');
+  if(detEl && day) {
+    var v=S3[day]||0, tx=GA3[day]?GA3[day].tx:0, rev=GA3[day]?GA3[day].rev:0;
+    var dayStoreTot = stores.reduce(function(s,st){return s+(STORE_DATA[day]&&STORE_DATA[day][st]?STORE_DATA[day][st]:0);},0);
+    detEl.innerHTML = '<thead><tr><th class="tl">項目</th><th>數值</th></tr></thead><tbody>'+
+      '<tr><td class="tl">Shopify 銷售</td><td class="mn">'+fmt(v)+'</td></tr>'+
+      '<tr><td class="tl">官網</td><td class="mn">'+fmt(Math.max(0,v-dayStoreTot))+'</td></tr>'+
+      '<tr><td class="tl">門市合計</td><td class="mn">'+fmt(dayStoreTot)+'</td></tr>'+
+      '<tr><td class="tl">GA4 購買</td><td class="mn">'+tx+'筆</td></tr>'+
+      '<tr><td class="tl">GA4 收益</td><td class="mn">'+fmt(rev)+'</td></tr>'+
+      '</tbody>';
   }
 }
+
 
 function renderSourceRank(){
   if(CHARTS['cSrcRevPie']) { CHARTS['cSrcRevPie'].destroy(); delete CHARTS['cSrcRevPie']; }
@@ -2605,69 +2714,56 @@ function renderSourceRank(){
 }
 
 function renderStore() {
-  // 清除舊圖表
   if(CHARTS['cStorePie']){CHARTS['cStorePie'].destroy();delete CHARTS['cStorePie'];}
   if(CHARTS['cStoreTrend']){CHARTS['cStoreTrend'].destroy();delete CHARTS['cStoreTrend'];}
 
-  // 依目前時段篩選門市資料
-  const tp = getTPDays();
-  const daySet = new Set(tp.days);
-  const dates = Object.keys(STORE_DATA).filter(d=>daySet.has(d)).sort();
-  const stores = ['高雄-夢時代','台中-新光三越中港店','新莊-宏匯廣場'];
-  const storeTotal = {};
-  stores.forEach(s=>{storeTotal[s]=dates.reduce((sum,d)=>sum+(STORE_DATA[d]?.[s]||0),0);});
-  const grand = stores.reduce((s,st)=>s+storeTotal[st],0);
-  const dayShopify = tp.days.reduce((s,d)=>s+(S3[d]||0),0);
-  const onlineTotal = Math.max(0, dayShopify - grand);
-  const allTotal = grand + onlineTotal;
+  var tp = getTPDays();
+  var daySet = tp.days;
+  var dates = Object.keys(STORE_DATA).filter(function(d){return daySet.indexOf(d)>=0;}).sort();
+  var stores = ['高雄-夢時代','台中-新光三越中港店','新莊-宏匯廣場'];
+  var storeClrs = {'高雄-夢時代':'#f0a020','台中-新光三越中港店':'#28d97a','新莊-宏匯廣場':'#9d7fff'};
+  var storeTotal = {};
+  stores.forEach(function(s){
+    storeTotal[s] = dates.reduce(function(sum,d){return sum+(STORE_DATA[d]&&STORE_DATA[d][s]?STORE_DATA[d][s]:0);},0);
+  });
+  var grand = stores.reduce(function(s,st){return s+storeTotal[st];},0);
 
-  const storeClrs = {'高雄-夢時代':'#f0a020','台中-新光三越中港店':'#28d97a','新莊-宏匯廣場':'#9d7fff'};
-  const clrArr = stores.map(s=>storeClrs[s]||'#4b8eff');
+  // 圓餅圖（只有三個門市）
+  mkChart('cStorePie', {type:'doughnut', data:{
+    labels: stores.map(function(s){return s.split('-')[1]||s;}),
+    datasets:[{data:stores.map(function(s){return storeTotal[s]||0;}),
+      backgroundColor:stores.map(function(s){return storeClrs[s];}),borderWidth:0,hoverOffset:4}]
+  }, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+    plugins:{legend:{display:true,position:'right',labels:{color:'#3d5070',font:{size:10},boxWidth:8}},
+      tooltip:{...AX.tt,callbacks:{label:function(ctx){return ctx.label+': '+fmt(ctx.parsed)+' ('+(grand?(ctx.parsed/grand*100).toFixed(1):0)+'%)';}}}}}});
 
-  // 圓餅圖
-  mkChart('cStorePie',{type:'doughnut',data:{
-    labels:['官網（線上）',...stores.map(s=>s.split('-')[1]||s)],
-    datasets:[{data:[onlineTotal,...stores.map(s=>storeTotal[s]||0)],
-      backgroundColor:['#4b8eff',...clrArr],borderWidth:0,hoverOffset:4}]
-  },options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
-    plugins:{legend:{display:false},
-             tooltip:{...AX.tt,callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed)} (${allTotal?(ctx.parsed/allTotal*100).toFixed(1):0}%)`}}}}});
-
-  // 更新 legend 文字
-  const legEls = document.querySelectorAll('#sh-store .store-leg');
-  if(legEls.length){
-    const vals=[onlineTotal,...stores.map(s=>storeTotal[s]||0)];
-    legEls.forEach((el,i)=>{
-      const vEl=el.querySelector('.store-val'); if(vEl)vEl.textContent=fmt(vals[i]||0);
-      const pEl=el.querySelector('.store-pct'); if(pEl)pEl.textContent=allTotal?(((vals[i]||0)/allTotal*100).toFixed(1)+'%'):'—';
-    });
-  }
-
-  // 趨勢折線圖
-  mkChart('cStoreTrend',{type:'bar',data:{
-    labels:dates.map(d=>d.slice(5)),
-    datasets:stores.map(s=>({
+  // 趨勢長條圖（堆疊）
+  mkChart('cStoreTrend', {type:'bar', data:{
+    labels: dates.map(function(d){return d.slice(5);}),
+    datasets: stores.map(function(s){return {
       label:s.split('-')[1]||s,
-      data:dates.map(d=>(STORE_DATA[d]?.[s])||0),
-      backgroundColor:storeClrs[s]+'99',borderRadius:3,stack:'s'
-    }))
-  },options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      data:dates.map(function(d){return STORE_DATA[d]&&STORE_DATA[d][s]?STORE_DATA[d][s]:0;}),
+      backgroundColor:(storeClrs[s]||'#ccc')+'cc', borderRadius:3, stack:'s'
+    };})
+  }, options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
     plugins:{legend:{display:true,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},
-    scales:{x:{ticks:{...AX.t,maxRotation:45},grid:{display:false},border:{color:'transparent'}},
-            y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+    scales:{x:{stacked:true,ticks:{...AX.t,maxRotation:45},grid:{display:false},border:{color:'transparent'}},
+            y:{stacked:true,ticks:{callback:function(v){return fmtK(v);}, ...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
 
-  // 明細表
-  const el=document.getElementById('tStoreDetail');
-  if(el){
-    el.innerHTML='<thead><tr><th class="tl">日期</th>'+stores.map(s=>`<th>${s.split('-')[1]||s}</th>`).join('')+'<th>門市合計</th></tr></thead><tbody>'+
-    [...dates].reverse().map(d=>{
-      const tot=stores.reduce((s,st)=>s+(STORE_DATA[d]?.[st]||0),0);
-      return`<tr><td class="tl mn" style="color:var(--t3)">${d}</td>`+
-        stores.map(s=>`<td class="mn">${STORE_DATA[d]?.[s]?fmt(STORE_DATA[d][s]):'—'}</td>`).join('')+
-        `<td class="mn" style="font-weight:600">${fmt(tot)}</td></tr>`;
-    }).join('')+'</tbody>';
+  // 明細表（只含門市）
+  var el = document.getElementById('tStoreDetail');
+  if(el) {
+    var thead = '<thead><tr><th class="tl">日期</th>'+stores.map(function(s){return '<th>'+( s.split('-')[1]||s)+'</th>';}).join('')+'<th>門市合計</th></tr></thead>';
+    var tbody = [...dates].reverse().map(function(d){
+      var tot = stores.reduce(function(s,st){return s+(STORE_DATA[d]&&STORE_DATA[d][st]?STORE_DATA[d][st]:0);},0);
+      return '<tr><td class="tl mn" style="color:var(--t3)">'+d+'</td>'+
+        stores.map(function(s){return '<td class="mn">'+(STORE_DATA[d]&&STORE_DATA[d][s]?fmt(STORE_DATA[d][s]):'—')+'</td>';}).join('')+
+        '<td class="mn" style="font-weight:600">'+fmt(tot)+'</td></tr>';
+    }).join('');
+    el.innerHTML = thead+'<tbody>'+tbody+'</tbody>';
   }
 }
+
 
 
 
@@ -2907,74 +3003,136 @@ async function loadCreativeData(forceReload=false) {
 
 function renderMetaCreative() {
   const lbl = document.getElementById('metaCreativePeriod');
-  if(lbl) lbl.textContent = DR_CACHE ? `${DR_CACHE.from?.slice(5)} – ${DR_CACHE.to?.slice(5)}` : '近30天';
+  if(lbl) lbl.textContent = DR_CACHE ? (DR_CACHE.from.slice(5) + ' – ' + DR_CACHE.to.slice(5)) : '近30天';
   const data = META_CREATIVE;
   if (!data.length) return;
-  const maxSp = Math.max(...data.map(d => d.sp));
-  const body = data.map(r => {
-    const spPct = maxSp ? r.sp / maxSp * 100 : 0;
-    const roasClr = r.roas >= 3.5 ? 'var(--grn)' : r.roas >= 2 ? 'var(--amb)' : 'var(--red)';
-    const uctrPct = (r.uctr * 100).toFixed(2);
-    const purCvr  = (r.purCvr * 100).toFixed(2);
-    const atcCvr  = (r.atcCvr * 100).toFixed(2);
-    return `<tr>
-      <td class="tl" style="max-width:180px">
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.name}">${r.name}</div>
-        <div style="font-size:9px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.camp}</div>
-        <div style="height:2px;background:rgba(75,142,255,.15);border-radius:1px;margin-top:3px">
-          <div style="height:2px;width:${spPct}%;background:var(--blue);border-radius:1px"></div>
-        </div>
-      </td>
-      <td class="mn">${fmt(r.sp)}</td>
-      <td class="mn">${r.reach.toLocaleString()}</td>
-      <td class="mn">${fmt(r.cpm)}</td>
-      <td class="mn"><span class="pill ${+uctrPct>=2?'pg':+uctrPct>=1?'py':'pr'}">${uctrPct}%</span></td>
-      <td class="mn">${fmt(r.ucpc)}</td>
-      <td class="mn" style="border-left:1px solid var(--bdr)">${Math.round(r.pur)||0}</td>
-      <td class="mn">${fmt(r.purV)}</td>
-      <td class="mn">${r.purCpa != null ? fmt(r.purCpa) : '<span style="color:var(--t4)">—</span>'}</td>
-      <td class="mn"><span class="pill ${+purCvr>=1?'pg':+purCvr>=0.3?'py':'pr'}">${purCvr}%</span></td>
-      <td class="mn" style="border-left:1px solid var(--bdr)">${Math.round(r.atc)||0}</td>
-      <td class="mn">${fmt(r.atcV)}</td>
-      <td class="mn">${r.atcCpa != null ? fmt(r.atcCpa) : '<span style="color:var(--t4)">—</span>'}</td>
-      <td class="mn"><span class="pill ${+atcCvr>=5?'pg':+atcCvr>=2?'py':'pr'}">${atcCvr}%</span></td>
-      <td class="mn" style="border-left:1px solid var(--bdr);color:${roasClr};font-weight:700">${r.roas.toFixed(2)}x</td>
-    </tr>`;
+
+  // ── Top / Bottom 10（以 ROAS 排序，花費 >500 才列入）──
+  const ranked = data.filter(function(r){ return r.sp >= 500; })
+    .sort(function(a,b){ return b.roas - a.roas; });
+
+  function roasClr(v){ return v >= 3.5 ? 'var(--grn)' : v >= 2 ? 'var(--amb)' : 'var(--red)'; }
+  function rankRow(r, i, showRank) {
+    var adName = r.n || '(未命名)';
+    var shortName = adName.length > 30 ? adName.slice(0, 30) + '…' : adName;
+    return '<tr>' +
+      (showRank ? '<td style="color:var(--t3);font-size:10px;width:20px">' + (i+1) + '</td>' : '') +
+      '<td class="tl" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + adName.replace(/"/g,'&quot;') + '">' + shortName + '</td>' +
+      '<td class="mn">NT$' + Math.round(r.sp).toLocaleString() + '</td>' +
+      '<td class="mn" style="color:' + roasClr(r.roas) + ';font-weight:600">' + r.roas.toFixed(2) + 'x</td>' +
+      '<td class="mn">' + (r.purN||0) + '次</td>' +
+      '<td class="mn">NT$' + Math.round(r.purV||0).toLocaleString() + '</td>' +
+      '<td class="mn">NT$' + (r.purN>0 ? Math.round(r.sp/r.purN).toLocaleString() : '—') + '</td>' +
+      '</tr>';
+  }
+
+  var top10  = ranked.slice(0, 10);
+  var bot10  = [...ranked].reverse().slice(0, 10);
+  var rankThead = '<thead><tr><th></th><th class="tl">素材名稱</th><th>花費</th><th>ROAS</th><th>購買次</th><th>購買值</th><th>每次成本</th></tr></thead>';
+
+  var t10el = document.getElementById('tMetaTop10');
+  if(t10el) t10el.innerHTML = rankThead + '<tbody>' + top10.map(function(r,i){return rankRow(r,i,true);}).join('') + '</tbody>';
+
+  var b10el = document.getElementById('tMetaBot10');
+  if(b10el) b10el.innerHTML = rankThead + '<tbody>' + bot10.map(function(r,i){return rankRow(r,i,true);}).join('') + '</tbody>';
+
+  // ── 完整表格（原有邏輯保留）──
+  const maxSp = Math.max.apply(null, data.map(function(d){return d.sp;}));
+  var body = data.map(function(r) {
+    var spPct = maxSp ? r.sp / maxSp * 100 : 0;
+    var rClr = roasClr(r.roas);
+    var uctrPct = (r.uctr * 100).toFixed(2);
+    var purCvr  = r.uc > 0 ? (r.purN / r.uc * 100).toFixed(2) : '—';
+    var atcCvr  = r.uc > 0 ? (r.atcN / r.uc * 100).toFixed(2) : '—';
+    var adName  = r.n || '(未命名)';
+    var shortN  = adName.length > 28 ? adName.slice(0, 28) + '…' : adName;
+    return '<tr>' +
+      '<td class="tl" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + adName.replace(/"/g,'&quot;') + '">' + shortN + '</td>' +
+      '<td class="mn"><div style="display:flex;align-items:center;gap:4px"><span>NT$' + Math.round(r.sp).toLocaleString() + '</span>' +
+        '<div style="flex:1;height:3px;background:var(--s4);border-radius:2px;min-width:30px"><div style="height:3px;width:' + spPct.toFixed(0) + '%;background:var(--blue);border-radius:2px"></div></div></div></td>' +
+      '<td class="mn">' + (r.reach||0).toLocaleString() + '</td>' +
+      '<td class="mn">' + Math.round(r.cpm||0) + '</td>' +
+      '<td class="mn">' + uctrPct + '%</td>' +
+      '<td class="mn">' + Math.round(r.cpc||0) + '</td>' +
+      '<td class="mn" style="border-left:1px solid var(--bdr)">' + (r.purN||0) + '</td>' +
+      '<td class="mn">NT$' + Math.round(r.purV||0).toLocaleString() + '</td>' +
+      '<td class="mn">NT$' + (r.purN>0 ? Math.round(r.sp/r.purN).toLocaleString() : '—') + '</td>' +
+      '<td class="mn">' + purCvr + (purCvr !== '—' ? '%' : '') + '</td>' +
+      '<td class="mn" style="border-left:1px solid var(--bdr)">' + (r.atcN||0) + '</td>' +
+      '<td class="mn">NT$' + Math.round(r.atcV||0).toLocaleString() + '</td>' +
+      '<td class="mn">NT$' + (r.atcN>0 ? Math.round(r.sp/r.atcN).toLocaleString() : '—') + '</td>' +
+      '<td class="mn">' + atcCvr + (atcCvr !== '—' ? '%' : '') + '</td>' +
+      '<td class="mn" style="border-left:1px solid var(--bdr);font-weight:600;color:' + rClr + '">' + r.roas.toFixed(2) + 'x</td>' +
+      '</tr>';
   }).join('');
-  document.getElementById('tMetaCreativeBody').innerHTML = body || '<tr><td colspan="15" style="color:var(--t3);padding:16px">無資料</td></tr>';
+
+  var bodyEl = document.getElementById('tMetaCreativeBody');
+  if(bodyEl) bodyEl.innerHTML = body || '<tr><td colspan="15" style="padding:16px;color:var(--t3);text-align:center">無符合條件的素材資料</td></tr>';
 }
+
 
 function renderGoogleCreative() {
   const lbl = document.getElementById('googleCreativePeriod');
-  if(lbl) lbl.textContent = DR_CACHE ? `${DR_CACHE.from?.slice(5)} – ${DR_CACHE.to?.slice(5)}` : '近30天';
+  if(lbl) lbl.textContent = DR_CACHE ? (DR_CACHE.from.slice(5) + ' – ' + DR_CACHE.to.slice(5)) : '近30天';
   const data = GOOGLE_CREATIVE;
   if (!data.length) return;
-  const maxSp = Math.max(...data.map(d => d.sp));
-  const body = data.map(r => {
-    const spPct = maxSp ? r.sp / maxSp * 100 : 0;
-    const roasClr = r.roas >= 4 ? 'var(--grn)' : r.roas >= 2 ? 'var(--amb)' : 'var(--red)';
-    const ctrPct  = (r.ctr * 100).toFixed(2);
-    const cvrPct  = (r.cvr * 100).toFixed(2);
-    return `<tr>
-      <td class="tl" style="max-width:200px">
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.name}">${r.name}</div>
-        <div style="height:2px;background:rgba(240,160,32,.15);border-radius:1px;margin-top:3px">
-          <div style="height:2px;width:${spPct}%;background:var(--amb);border-radius:1px"></div>
-        </div>
-      </td>
-      <td class="tl" style="font-size:10px;color:var(--t3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.camp}</td>
-      <td class="mn">${fmt(r.sp)}</td>
-      <td class="mn">${r.imp.toLocaleString()}</td>
-      <td class="mn">${fmt(r.cpm)}</td>
-      <td class="mn"><span class="pill ${+ctrPct>=5?'pg':+ctrPct>=1?'py':'pr'}">${ctrPct}%</span></td>
-      <td class="mn" style="border-left:1px solid var(--bdr)">${r.conv.toFixed(1)}</td>
-      <td class="mn">${fmt(r.convV)}</td>
-      <td class="mn">${r.cpa != null ? fmt(r.cpa) : '<span style="color:var(--t4)">—</span>'}</td>
-      <td class="mn" style="border-left:1px solid var(--bdr);color:${roasClr};font-weight:700">${r.roas.toFixed(2)}x</td>
-    </tr>`;
+
+  // ── Top / Bottom 10（以 ROAS 排序，花費 >500 才列入）──
+  const ranked = data.filter(function(r){ return r.sp >= 500; })
+    .sort(function(a,b){ return b.roas - a.roas; });
+
+  function roasClr(v){ return v >= 4 ? 'var(--grn)' : v >= 2 ? 'var(--amb)' : 'var(--red)'; }
+  function rankRow(r, i) {
+    var adName = r.n || '(PMax 自動)';
+    var shortName = adName.length > 30 ? adName.slice(0, 30) + '…' : adName;
+    return '<tr>' +
+      '<td style="color:var(--t3);font-size:10px;width:20px">' + (i+1) + '</td>' +
+      '<td class="tl" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + adName.replace(/"/g,'&quot;') + '">' + shortName + '</td>' +
+      '<td class="tl" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--t3)">' + (r.camp||'') + '</td>' +
+      '<td class="mn">NT$' + Math.round(r.sp).toLocaleString() + '</td>' +
+      '<td class="mn" style="color:' + roasClr(r.roas) + ';font-weight:600">' + r.roas.toFixed(2) + 'x</td>' +
+      '<td class="mn">NT$' + Math.round(r.rev||0).toLocaleString() + '</td>' +
+      '<td class="mn">NT$' + (r.conv>0 ? Math.round(r.sp/r.conv).toLocaleString() : '—') + '</td>' +
+      '</tr>';
+  }
+
+  var top10 = ranked.slice(0, 10);
+  var bot10 = [...ranked].reverse().slice(0, 10);
+  var rankThead = '<thead><tr><th></th><th class="tl">廣告名稱</th><th class="tl">活動</th><th>花費</th><th>ROAS</th><th>轉換值</th><th>每次成本</th></tr></thead>';
+
+  var t10el = document.getElementById('tGoogleTop10');
+  if(t10el) t10el.innerHTML = rankThead + '<tbody>' + top10.map(function(r,i){return rankRow(r,i);}).join('') + '</tbody>';
+
+  var b10el = document.getElementById('tGoogleBot10');
+  if(b10el) b10el.innerHTML = rankThead + '<tbody>' + bot10.map(function(r,i){return rankRow(r,i);}).join('') + '</tbody>';
+
+  // ── 完整表格（原有邏輯保留）──
+  const maxSp = Math.max.apply(null, data.map(function(d){return d.sp;}));
+  var body = data.map(function(r) {
+    var spPct = maxSp ? r.sp / maxSp * 100 : 0;
+    var rClr  = roasClr(r.roas);
+    var adName = r.n || '(PMax 自動)';
+    var shortN = adName.length > 28 ? adName.slice(0, 28) + '…' : adName;
+    var campN  = (r.camp||'').length > 20 ? (r.camp||'').slice(0,20) + '…' : (r.camp||'');
+    return '<tr>' +
+      '<td class="tl" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + adName.replace(/"/g,'&quot;') + '">' + shortN + '</td>' +
+      '<td class="tl" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--t3)">' + campN + '</td>' +
+      '<td class="mn"><div style="display:flex;align-items:center;gap:4px"><span>NT$' + Math.round(r.sp).toLocaleString() + '</span>' +
+        '<div style="flex:1;height:3px;background:var(--s4);border-radius:2px;min-width:30px"><div style="height:3px;width:' + spPct.toFixed(0) + '%;background:var(--blue);border-radius:2px"></div></div></div></td>' +
+      '<td class="mn">' + (r.imp||0).toLocaleString() + '</td>' +
+      '<td class="mn">' + Math.round(r.cpm||0) + '</td>' +
+      '<td class="mn">' + (r.ctr ? (r.ctr*100).toFixed(2) + '%' : '—') + '</td>' +
+      '<td class="mn" style="border-left:1px solid var(--bdr)">' + (r.conv||0).toFixed(1) + '</td>' +
+      '<td class="mn">NT$' + Math.round(r.rev||0).toLocaleString() + '</td>' +
+      '<td class="mn">NT$' + (r.conv>0 ? Math.round(r.sp/r.conv).toLocaleString() : '—') + '</td>' +
+      '<td class="mn" style="border-left:1px solid var(--bdr);font-weight:600;color:' + rClr + '">' + r.roas.toFixed(2) + 'x</td>' +
+      '</tr>';
   }).join('');
-  document.getElementById('tGoogleCreativeBody').innerHTML = body || '<tr><td colspan="10" style="color:var(--t3);padding:16px">無資料</td></tr>';
+
+  var bodyEl = document.getElementById('tGoogleCreativeBody');
+  if(bodyEl) bodyEl.innerHTML = body || '<tr><td colspan="10" style="padding:16px;color:var(--t3);text-align:center">無符合條件的素材資料</td></tr>';
 }
+
 
 // DR_CACHE 供 loadCreativeData 使用
 let DR_CACHE = null;
