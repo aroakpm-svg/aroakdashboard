@@ -964,6 +964,134 @@ async function doRefresh(){
   btn.textContent='↻ 更新'; btn.style.pointerEvents='';
 }
 
+// ═══ TIME PERIOD ═══
+const DK_fn = () => Object.keys(S3).sort().filter(d=>d.startsWith('2026-03'));
+
+function setTP(mode,btn){
+  TP=mode;
+  document.querySelectorAll('.tpb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('dpWrap').classList.toggle('show',mode==='day');
+  updateTPLabel();
+  if(DATA_READY) drawPage(curPage);
+}
+
+function updateTPLabel(){
+  const DK=DK_fn();
+  const last=DK[DK.length-1]||'';
+  const labels={
+    '30d':`近30天 (${DK[0]?.slice(5)||''}–${last.slice(5)||''})`,
+    'day':'單日對比',
+    'mom':'MoM: 3月 vs 2月',
+    'qoq':'QoQ: 2026Q1 vs 2025Q4',
+    'week':'週對比: 本週 vs 上週',
+    'yoy':'YoY: 2026年3月 vs 2025年3月'
+  };
+  document.getElementById('tpLabel').textContent=labels[TP]||'';
+}
+
+function getTPDays(){
+  const DK=DK_fn();
+  const selectedDay=document.getElementById('dayPick').value||DK[DK.length-1];
+  if(TP==='30d'){
+    return{days:DK,labels:DK.map(d=>d.slice(5)),vals:DK.map(d=>S3[d]||0),
+      prevDays:null,prevVals:null,title:`近30天（${DK[0]?.slice(5)}–${DK[DK.length-1]?.slice(5)}）`,mode:'30d'};
+  }
+  if(TP==='day'){
+    const prev=new Date(selectedDay);prev.setDate(prev.getDate()-1);
+    const pd=prev.toISOString().slice(0,10);
+    return{days:[selectedDay],labels:[selectedDay.slice(5)],vals:[S3[selectedDay]||0],
+      prevDays:[pd],prevVals:[S3[pd]||S2[pd]||0],title:`${selectedDay.slice(5)} vs ${pd.slice(5)}`,mode:'day'};
+  }
+  if(TP==='mom'){
+    const marV=DK.map(d=>S3[d]||0);
+    const febKeys=Object.keys(S2).sort().slice(0,DK.length);
+    const febV=febKeys.map(d=>S2[d]||0);
+    return{days:DK,labels:DK.map((_,i)=>`${i+1}日`),vals:marV,
+      prevDays:febKeys,prevVals:febV,title:'MoM：3月 vs 2月（日序對齊）',mode:'mom'};
+  }
+  if(TP==='qoq'){
+    const jan=2500000,feb=Object.values(S2).reduce((a,b)=>a+b,0),mar=Object.values(S3).reduce((a,b)=>a+b,0);
+    const q4Oct=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-10')).reduce((s,[,v])=>s+v,0);
+    const q4Nov=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-11')).reduce((s,[,v])=>s+v,0);
+    const q4Dec=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-12')).reduce((s,[,v])=>s+v,0);
+    return{days:DK,labels:['1月','2月','3月'],vals:[jan,feb,mar],
+      prevDays:null,prevVals:[q4Oct,q4Nov,q4Dec],title:'QoQ：2026Q1 vs 2025Q4',mode:'qoq'};
+  }
+  if(TP==='week'){
+    const wk0=DK.slice(-7),wk1=DK.slice(-14,-7);
+    const WD=['日','一','二','三','四','五','六'];
+    return{days:wk0,labels:wk0.map((d,i)=>`${d.slice(5)}(${WD[new Date(d).getDay()]})`),vals:wk0.map(d=>S3[d]||0),
+      prevDays:wk1,prevVals:wk1.map(d=>S3[d]||0),title:'週對比：本週 vs 上週',mode:'week'};
+  }
+  if(TP==='yoy'){
+    const v26=DK.map(d=>S3[d]||0);
+    const v25=DK.map(d=>S25_3[d.slice(5)]||0);
+    return{days:DK,labels:DK.map(d=>d.slice(5)),vals:v26,prevDays:DK,prevVals:v25,title:'YoY：2026年3月 vs 2025年3月',mode:'yoy'};
+  }
+  return{days:DK,labels:DK.map(d=>d.slice(5)),vals:DK.map(d=>S3[d]||0),prevDays:null,prevVals:null,title:'',mode:TP};
+}
+
+function dh(c,p){
+  if(p==null||p===0)return'<span class="delta d-fl">—</span>';
+  const r=((c-p)/Math.abs(p)*100),up=r>=0;
+  return`<span class="delta ${up?'d-up':'d-dn'}">${up?'▲+':'▼'}${Math.abs(r).toFixed(1)}%</span>`;
+}
+
+function buildCmpKPI(tp){
+  const{days,vals,prevDays,prevVals,mode}=tp;
+  const totCurr=vals.reduce((s,v)=>s+v,0);
+  const totPrev=prevVals?prevVals.reduce((s,v)=>s+v,0):null;
+  const adCurr=days.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0);
+  const adPrev=prevDays?prevDays.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0):null;
+  const sessCurr=days.reduce((s,d)=>s+(GA3[d]?.s||0),0);
+  const sessPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.s||0),0):null;
+  const txCurr=days.reduce((s,d)=>s+(GA3[d]?.tx||0),0);
+  const txPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.tx||0),0):null;
+  const prevLabel=mode==='mom'?'2月':mode==='qoq'?'2025Q4':mode==='week'?'上週':mode==='yoy'?'2025年同期':mode==='day'?'前一日':'—';
+  if(mode==='qoq'){
+    return`<div class="cmp4">
+      <div class="cc"><div class="ccl">2026Q1累計</div><div class="ccv" style="color:var(--blue)">${fmt(totCurr)}</div><div class="ccp">${prevLabel}：${fmt(totPrev)}</div>${dh(totCurr,totPrev)}</div>
+      <div class="cc"><div class="ccl">Q1月均</div><div class="ccv" style="color:var(--grn)">${fmt(Math.round(totCurr/3))}</div><div class="ccp">Q4月均：${fmt(Math.round((totPrev||0)/3))}</div>${dh(totCurr/3,(totPrev||0)/3)}</div>
+      <div class="cc"><div class="ccl">Q4最高(雙11)</div><div class="ccv" style="color:var(--amb)">$1,977K</div><div class="ccp">11/11 當天紀錄</div></div>
+      <div class="cc"><div class="ccl">QoQ成長率</div><div class="ccv" style="color:${totCurr>=(totPrev||0)?'var(--cyan)':'var(--red)'}">${(((totCurr/(totPrev||1))-1)*100).toFixed(1)}%</div><div class="ccp">${totCurr>=(totPrev||0)?'▲ 成長':'▼ 衰退'}</div></div>
+    </div><div class="ib warn" style="margin-bottom:12px"><span>⚠️</span><div>Q4含雙11、雙12旺季；Q1含農曆新年。均為旺季，直接比較需考量節慶因素。</div></div>`;
+  }
+  return`<div class="cmp4">
+    <div class="cc"><div class="ccl">期間淨銷售</div><div class="ccv" style="color:var(--blue)">${fmt(totCurr)}</div><div class="ccp">${prevLabel}：${totPrev!=null?fmt(totPrev):'—'}</div>${dh(totCurr,totPrev)}</div>
+    <div class="cc"><div class="ccl">廣告花費</div><div class="ccv" style="color:var(--amb)">${fmt(adCurr)}</div><div class="ccp">${prevLabel}：${adPrev!=null?fmt(adPrev):'—'}</div>${dh(adCurr,adPrev)}</div>
+    <div class="cc"><div class="ccl">Sessions</div><div class="ccv" style="color:var(--pur)">${sessCurr.toLocaleString()}</div><div class="ccp">${prevLabel}：${sessPrev!=null?sessPrev.toLocaleString():'—'}</div>${dh(sessCurr,sessPrev)}</div>
+    <div class="cc"><div class="ccl">購買筆數</div><div class="ccv" style="color:var(--grn)">${txCurr}筆</div><div class="ccp">${prevLabel}：${txPrev!=null?txPrev+'筆':'—'}</div>${dh(txCurr,txPrev)}</div>
+  </div>${TP==='mom'?'<div class="ib warn" style="margin-bottom:12px"><span>⚠️</span><div><strong>2月含農曆新年旺季</strong>，以旺季後日均為正常基準。</div></div>':''}`;
+}
+
+function buildCmpChart(id,tp,chartType){
+  const{labels,vals,prevVals,mode}=tp;
+  const isLine=chartType==='line';
+  const ds=[{label:mode==='mom'?'3月':mode==='week'?'本週':mode==='yoy'?'2026年':'本期',data:vals,
+    backgroundColor:'rgba(75,142,255,.65)',borderColor:'#4b8eff',borderWidth:isLine?2:0,
+    fill:false,tension:.3,pointRadius:isLine?2:0,borderRadius:isLine?0:3}];
+  if(prevVals) ds.push({label:mode==='mom'?'2月':mode==='week'?'上週':mode==='yoy'?'2025年':'前期',data:prevVals,
+    backgroundColor:'rgba(100,130,165,.38)',borderColor:'#6b7a8a',borderWidth:isLine?2:0,
+    fill:false,tension:.3,pointRadius:isLine?2:0,borderRadius:isLine?0:3});
+  return mkChart(id,{type:isLine?'line':'bar',data:{labels,datasets:ds},options:{
+    responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:!!prevVals,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},
+    scales:{x:{ticks:{...AX.t,maxRotation:mode==='30d'||mode==='mom'?90:45},grid:{display:false},border:{color:'transparent'}},
+            y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
+}
+
+// ═══ PAGE NAV ═══
+function goPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('on');
+  btn.classList.add('on');
+  curPage=id;
+  if(DATA_READY) drawPage(id);
+}
+function redrawAll(){ updateTPLabel(); if(DATA_READY) drawPage(curPage); }
+
 // ═══ DRAW PAGES ═══
 function drawPage(id){
   if(!DATA_READY) return;
@@ -1271,9 +1399,9 @@ function drawShopify(){
     const activePanel = document.querySelector('.sh-panel[style*="block"]');
     if(activePanel){
       const id = activePanel.id.replace('sh-','');
-      if(id==='order') renderShopifyOrder(days);
+      if(id==='order') renderOrderDay();
       else if(id==='product') renderProductRank();
-      else if(id==='source') renderOrderSrc();
+      else if(id==='source') renderSourceRank();
       else if(id==='store') renderStore();
       else if(id==='shopee') renderShopee();
     } else {
