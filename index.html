@@ -792,33 +792,31 @@ async function loadAllData() {
   DATA_READY = false;
   document.getElementById('tb-period').textContent = '資料載入中...';
 
-  // Date ranges
+  // Date ranges — mar_to 動態取今天
   const today = new Date();
-  const fmt0 = d => d.toISOString().slice(0,10);
-  const add = (d,n) => { const r=new Date(d); r.setDate(r.getDate()+n); return r; };
-
-  const mar_from = '2026-03-01', mar_to = '2026-03-30';
+  const todayStr = today.toISOString().slice(0,10);
+  const mar_from = '2026-03-01';
+  const mar_to   = todayStr; // 不硬編碼，每次都拉最新
   const feb_from = '2026-02-01', feb_to = '2026-02-28';
   const q4_from  = '2025-10-01', q4_to  = '2025-12-31';
-  const y25_from = '2025-03-01', y25_to = '2025-03-30';
+  const y25_from = '2025-03-01', y25_to = '2025-03-31';
 
   try {
-    // 平行載入所有資料
     const [shMar, shFeb, shQ4, sh25,
            ga4Mar,
            fbMar, fbCamp,
            gadsMar, gadsCamp,
            storeMar, ga4Src] = await Promise.all([
       // Shopify
-      wFetch('shopify',['date','order_net_sales','order_count'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to}),
+      wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to}),
       wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:feb_from,date_to:feb_to}),
       wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:q4_from,date_to:q4_to}),
       wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:y25_from,date_to:y25_to}),
       // GA4
       wFetch('googleanalytics4',['date','sessions','add_to_carts','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to}),
-      // Facebook
-      wFetch('facebook',['date','spend','purchase_roas'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:'{"attribution_window":"7d_click"}'}),
-      wFetch('facebook',['campaign_name','spend','purchase_roas','actions'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:'{"attribution_window":"7d_click"}'}),
+      // Facebook — options 傳 object，wFetch 內部會 JSON.stringify
+      wFetch('facebook',['date','spend','purchase_roas'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}}),
+      wFetch('facebook',['campaign_name','spend','purchase_roas','actions'],{accounts:ACC.fb,date_from:mar_from,date_to:mar_to,options:{attribution_window:'7d_click'}}),
       // Google Ads
       wFetch('google_ads',['date','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to}),
       wFetch('google_ads',['campaign_name','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to}),
@@ -828,240 +826,137 @@ async function loadAllData() {
       wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to}),
     ]);
 
-    // Aggregate Shopify by date
-    const shM = {}; shMar.forEach(r=>{if(!shM[r.date])shM[r.date]={v:0,cnt:0};shM[r.date].v+=+r.order_net_sales||0;shM[r.date].cnt+=+r.order_count||0;});
-    S3 = Object.fromEntries(Object.entries(shM).map(([d,v])=>[d,v.v]));
-    const shF = {}; shFeb.forEach(r=>{if(!shF[r.date])shF[r.date]=0;shF[r.date]+=+r.order_net_sales||0;});
+    // ── Shopify by date ──
+    const shM = {};
+    shMar.forEach(r=>{if(!shM[r.date])shM[r.date]=0; shM[r.date]+=+r.order_net_sales||0;});
+    S3 = shM;
+    const shF={};
+    shFeb.forEach(r=>{if(!shF[r.date])shF[r.date]=0; shF[r.date]+=+r.order_net_sales||0;});
     S2 = shF;
-    const shQ = {}; shQ4.forEach(r=>{if(!shQ[r.date])shQ[r.date]=0;shQ[r.date]+=+r.order_net_sales||0;});
+    const shQ={};
+    shQ4.forEach(r=>{if(!shQ[r.date])shQ[r.date]=0; shQ[r.date]+=+r.order_net_sales||0;});
     S25Q4 = shQ;
-    const sh5 = {}; sh25.forEach(r=>{if(!sh5[r.date])sh5[r.date]=0;sh5[r.date]+=+r.order_net_sales||0;});
-    // Convert to 3/01 etc format
+    const sh5={};
+    sh25.forEach(r=>{if(!sh5[r.date])sh5[r.date]=0; sh5[r.date]+=+r.order_net_sales||0;});
     S25_3 = Object.fromEntries(Object.entries(sh5).map(([d,v])=>[d.slice(5),v]));
 
-    // GA4 by date
-    const ga4M = {}; ga4Mar.forEach(r=>{if(!ga4M[r.date])ga4M[r.date]={s:0,atc:0,tx:0,rev:0};ga4M[r.date].s+=+r.sessions||0;ga4M[r.date].atc+=+r.add_to_carts||0;ga4M[r.date].tx+=+r.transactions||0;ga4M[r.date].rev+=+r.purchase_revenue||0;});
+    // ── GA4 by date ──
+    const ga4M={};
+    ga4Mar.forEach(r=>{
+      if(!ga4M[r.date])ga4M[r.date]={s:0,atc:0,tx:0,rev:0};
+      ga4M[r.date].s  +=+r.sessions||0;
+      ga4M[r.date].atc+=+r.add_to_carts||0;
+      ga4M[r.date].tx +=+r.transactions||0;
+      ga4M[r.date].rev+=+r.purchase_revenue||0;
+    });
     GA3 = ga4M;
 
-    // FB by date
-    const fbM = {}; fbMar.forEach(r=>{
+    // ── Facebook by date — purchase_roas 是 array，取 7d_click ──
+    const parseRoas = (v) => {
+      if(!v) return 0;
+      if(Array.isArray(v)){
+        const obj = v.find(x=>x['7d_click']);
+        return obj ? +obj['7d_click'] : 0;
+      }
+      return +v || 0;
+    };
+    const fbM={};
+    fbMar.forEach(r=>{
       if(!fbM[r.date])fbM[r.date]={sp:0,_rs:0,_sw:0};
-      const sp=+r.spend||0; fbM[r.date].sp+=sp;
-      const roas=Array.isArray(r.purchase_roas)?(+(r.purchase_roas.find(x=>x['7d_click'])?.['7d_click']||0)):(+r.purchase_roas||0);
-      fbM[r.date]._rs+=sp*roas; fbM[r.date]._sw+=sp;
+      const sp=+r.spend||0;
+      fbM[r.date].sp+=sp;
+      const roas=parseRoas(r.purchase_roas);
+      fbM[r.date]._rs+=sp*roas;
+      fbM[r.date]._sw+=sp;
     });
     FB3 = Object.fromEntries(Object.entries(fbM).map(([d,v])=>[d,{sp:v.sp,roas:v._sw?v._rs/v._sw:0}]));
 
-    // FB Campaigns
-    const fbCM = {}; fbCamp.forEach(r=>{
+    // ── FB Campaigns ──
+    const fbCM={};
+    fbCamp.forEach(r=>{
       if(!(+r.spend>0))return;
-      const k=r.campaign_name||'?'; if(!fbCM[k])fbCM[k]={n:k,sp:0,_rs:0,_sw:0,pur:0};
-      const sp=+r.spend||0; fbCM[k].sp+=sp;
-      const roas=Array.isArray(r.purchase_roas)?(+(r.purchase_roas.find(x=>x['7d_click'])?.['7d_click']||0)):(+r.purchase_roas||0);
+      const k=r.campaign_name||'?';
+      if(!fbCM[k])fbCM[k]={n:k,sp:0,_rs:0,_sw:0,pur:0};
+      const sp=+r.spend||0;
+      fbCM[k].sp+=sp;
+      const roas=parseRoas(r.purchase_roas);
       fbCM[k]._rs+=sp*roas; fbCM[k]._sw+=sp;
-      if(Array.isArray(r.actions)){const pa=r.actions.find(a=>a.action_type==='purchase');fbCM[k].pur+=+(pa?.['7d_click']||0);}
+      if(Array.isArray(r.actions)){
+        const pa=r.actions.find(a=>a.action_type==='purchase'||a.action_type==='omni_purchase');
+        if(pa) fbCM[k].pur+=+(pa['7d_click']||pa.value||0);
+      }
     });
     FB_CAMP = Object.values(fbCM).map(r=>({...r,roas:r._sw?r._rs/r._sw:0})).sort((a,b)=>b.roas-a.roas);
 
-    // Google Ads by date
-    const gaM = {}; gadsMar.forEach(r=>{if(!gaM[r.date])gaM[r.date]={sp:0,roas:0,_rv:0};gaM[r.date].sp+=+r.cost||0;gaM[r.date]._rv+=+r.conversions_value||0;});
+    // ── Google Ads by date ──
+    const gaM={};
+    gadsMar.forEach(r=>{
+      if(!gaM[r.date])gaM[r.date]={sp:0,_rv:0};
+      gaM[r.date].sp+=+r.cost||0;
+      gaM[r.date]._rv+=+r.conversions_value||0;
+    });
     Object.entries(gaM).forEach(([d,v])=>{v.roas=v.sp?v._rv/v.sp:0;});
     GAADS = gaM;
 
-    // Google Ads Campaigns
-    const gaCM = {}; gadsCamp.forEach(r=>{
+    // ── Google Ads Campaigns ──
+    const gaCM={};
+    gadsCamp.forEach(r=>{
       if(!(+r.cost>0))return;
-      const k=r.campaign_name||'?'; if(!gaCM[k])gaCM[k]={n:k,sp:0,rev:0};
-      gaCM[k].sp+=+r.cost||0; gaCM[k].rev+=+r.conversions_value||0;
+      const k=r.campaign_name||'?';
+      if(!gaCM[k])gaCM[k]={n:k,sp:0,rev:0};
+      gaCM[k].sp+=+r.cost||0;
+      gaCM[k].rev+=+r.conversions_value||0;
     });
     GA_CAMP = Object.values(gaCM).map(r=>({...r,roas:r.sp?r.rev/r.sp:0})).sort((a,b)=>b.roas-a.roas);
 
-    // Store
-    const stM = {}; storeMar.forEach(r=>{
+    // ── Store (dict: date → {store→amt}) ──
+    const stM={};
+    storeMar.forEach(r=>{
       if(!stM[r.date])stM[r.date]={};
       const s=r.order_retail_location_name||'?';
       stM[r.date][s]=(stM[r.date][s]||0)+(+r.order_net_sales||0);
     });
     STORE_DATA = stM;
 
-    // GA4 Source
-    GA4_SRC = ga4Src.filter(r=>+r.transactions>0).map(r=>({
-      src:`${r.source}/${r.medium}`,s:+r.sessions||0,tx:+r.transactions||0,rev:+r.purchase_revenue||0
-    })).sort((a,b)=>b.tx-a.tx);
+    // ── GA4 Source ──
+    GA4_SRC = ga4Src
+      .filter(r=>+r.transactions>0)
+      .map(r=>({
+        src:`${r.source}/${r.medium}`,
+        s:+r.sessions||0,
+        tx:+r.transactions||0,
+        rev:+r.purchase_revenue||0
+      }))
+      .sort((a,b)=>b.tx-a.tx);
 
     DATA_READY = true;
     LOADING = false;
 
     // Update UI
-    const DK = Object.keys(S3).sort();
-    const tot = sumO(S3);
-    document.getElementById('tb-period').textContent = `${DK[0]?.slice(5)}–${DK[DK.length-1]?.slice(5)} · ${DK.length}天`;
+    const DK = Object.keys(S3).sort().filter(d=>d.startsWith('2026-03'));
+    const last = DK[DK.length-1]||'';
+    document.getElementById('tb-period').textContent =
+      `${DK[0]?.slice(5)||''}–${last.slice(5)||''} · ${DK.length}天`;
 
-    // Update day picker options
+    // 更新 DR_CACHE 供素材分析用
+    DR_CACHE = {from: mar_from, to: last||mar_to};
+
+    // Update day picker
     const dp = document.getElementById('dayPick');
-    dp.innerHTML = [...DK].reverse().map((d,i)=>`<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`).join('');
+    const dkRev = [...DK].reverse().filter(d=>S3[d]>1000); // 過濾不完整的今日
+    dp.innerHTML = dkRev.map((d,i)=>
+      `<option value="${d}">${d.slice(5)}${i===0?'（最新）':''}</option>`
+    ).join('');
 
-    // Update static KPI cards (always show 3月 full period)
     updateStaticKPI();
-
-    // Draw current page
     drawPage(curPage);
 
   } catch(e) {
     LOADING = false;
-    document.getElementById('tb-period').textContent = `載入失敗: ${e.message}`;
-    console.error(e);
+    console.error('loadAllData error:', e);
+    document.getElementById('tb-period').textContent = `⚠️ 載入失敗：${e.message}`;
   }
 }
-
-function updateStaticKPI() {
-  const DK = Object.keys(S3).sort();
-  const totSales = sumO(S3);
-  const N = DK.length || 1;
-  const totSess = DK.reduce((s,d)=>s+(GA3[d]?.s||0),0);
-  const totTx   = DK.reduce((s,d)=>s+(GA3[d]?.tx||0),0);
-  const totAtc  = DK.reduce((s,d)=>s+(GA3[d]?.atc||0),0);
-  const totRev  = DK.reduce((s,d)=>s+(GA3[d]?.rev||0),0);
-  const totFbSp = DK.reduce((s,d)=>s+(FB3[d]?.sp||0),0);
-  const totGaSp = DK.reduce((s,d)=>s+(GAADS[d]?.sp||0),0);
-  const totAd   = totFbSp + totGaSp;
-  const fbRoasW = totFbSp ? DK.reduce((s,d)=>s+(FB3[d]?.sp||0)*(FB3[d]?.roas||0),0)/totFbSp : 0;
-  const gaRoasW = totGaSp ? DK.reduce((s,d)=>s+(GAADS[d]?.sp||0)*(GAADS[d]?.roas||0),0)/totGaSp : 0;
-  const cvr = totSess?(totTx/totSess*100).toFixed(2):'—';
-  const atcR= totSess?(totAtc/totSess*100).toFixed(1):'0';
-  const ab  = totAtc-totTx;
-
-  document.getElementById('kpi-overview').innerHTML = `
-    <div class="kc cb"><div class="kl">Shopify 淨銷售</div><div class="kv" style="color:var(--blue)">${fmtK(totSales)}</div><div class="ks">日均 ${fmtK(totSales/N)} · 目標 $200K</div><span class="kbadge by">達成 ${(totSales/N/200000*100).toFixed(0)}%</span></div>
-    <div class="kc cg"><div class="kl">GA4 購買收益</div><div class="kv" style="color:var(--grn)">${fmtK(totRev)}</div><div class="ks">${totTx}筆訂單 · 轉換率 ${cvr}%</div><span class="kbadge by">偏低</span></div>
-    <div class="kc cp"><div class="kl">Sessions</div><div class="kv" style="color:var(--pur)">${totSess.toLocaleString()}</div><div class="ks">日均 ${Math.round(totSess/N).toLocaleString()} · ATC率 ${atcR}%</div><span class="kbadge bg">穩定</span></div>
-    <div class="kc ca"><div class="kl">廣告花費</div><div class="kv" style="color:var(--amb)">${fmtK(totAd)}</div><div class="ks">FB ${fmtK(totFbSp)} · Google ${fmtK(totGaSp)}</div><span class="kbadge by">FB ${fbRoasW.toFixed(2)}x / GA ${gaRoasW.toFixed(2)}x</span></div>
-    <div class="kc cr"><div class="kl">購物車棄車</div><div class="kv" style="color:var(--red)">${ab.toLocaleString()}</div><div class="ks">加購${totAtc.toLocaleString()} → 購買${totTx}</div><span class="kbadge br">流失 ${totAtc?Math.round(ab/totAtc*100):0}%</span></div>`;
-
-  // Update funnel
-  document.getElementById('fn-sess').textContent = totSess.toLocaleString();
-  document.getElementById('fn-atc').textContent  = totAtc.toLocaleString();
-  document.getElementById('fn-tx').textContent   = totTx;
-  document.getElementById('fn-atcr').textContent = atcR+'%';
-  document.getElementById('fn-txr').textContent  = cvr+'%';
-}
-
-// ═══ TIME PERIOD ═══
-const DK_fn = () => Object.keys(S3).sort();
-
-function setTP(mode,btn){
-  TP=mode;
-  document.querySelectorAll('.tpb').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  document.getElementById('dpWrap').classList.toggle('show',mode==='day');
-  updateTPLabel();
-  if(DATA_READY) drawPage(curPage);
-}
-
-function updateTPLabel(){
-  const DK=DK_fn();
-  const last=DK[DK.length-1]||'';
-  const labels={
-    '30d':`近30天 (${DK[0]?.slice(5)||''}–${last.slice(5)||''})`,
-    'day':'單日對比',
-    'mom':'MoM: 3月 vs 2月',
-    'qoq':'QoQ: 2026Q1 vs 2025Q4',
-    'week':'週對比: 本週 vs 上週',
-    'yoy':'YoY: 2026年3月 vs 2025年3月'
-  };
-  document.getElementById('tpLabel').textContent=labels[TP]||'';
-}
-
-function getTPDays(){
-  const DK=DK_fn();
-  const selectedDay=document.getElementById('dayPick').value||DK[DK.length-1];
-  if(TP==='30d'){
-    return{days:DK,labels:DK.map(d=>d.slice(5)),vals:DK.map(d=>S3[d]||0),
-      prevDays:null,prevVals:null,title:`近30天（${DK[0]?.slice(5)}–${DK[DK.length-1]?.slice(5)}）`,mode:'30d'};
-  }
-  if(TP==='day'){
-    const prev=new Date(selectedDay);prev.setDate(prev.getDate()-1);
-    const pd=prev.toISOString().slice(0,10);
-    return{days:[selectedDay],labels:[selectedDay.slice(5)],vals:[S3[selectedDay]||0],
-      prevDays:[pd],prevVals:[S3[pd]||S2[pd]||0],title:`${selectedDay.slice(5)} vs ${pd.slice(5)}`,mode:'day'};
-  }
-  if(TP==='mom'){
-    const marV=DK.map(d=>S3[d]||0);
-    const febKeys=Object.keys(S2).sort().slice(0,DK.length);
-    const febV=febKeys.map(d=>S2[d]||0);
-    return{days:DK,labels:DK.map((_,i)=>`${i+1}日`),vals:marV,
-      prevDays:febKeys,prevVals:febV,title:'MoM：3月 vs 2月（日序對齊）',mode:'mom'};
-  }
-  if(TP==='qoq'){
-    const jan=2500000,feb=sumO(S2),mar=sumO(S3);
-    const q4Oct=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-10')).reduce((s,[,v])=>s+v,0);
-    const q4Nov=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-11')).reduce((s,[,v])=>s+v,0);
-    const q4Dec=Object.entries(S25Q4).filter(([d])=>d.startsWith('2025-12')).reduce((s,[,v])=>s+v,0);
-    return{days:DK,labels:['1月','2月','3月'],vals:[jan,feb,mar],
-      prevDays:null,prevVals:[q4Oct,q4Nov,q4Dec],title:'QoQ：2026Q1 vs 2025Q4',mode:'qoq'};
-  }
-  if(TP==='week'){
-    const wk0=DK.slice(-7),wk1=DK.slice(-14,-7);
-    const WD=['一','二','三','四','五','六','日'];
-    return{days:wk0,labels:wk0.map((d,i)=>`${d.slice(5)}(${WD[new Date(d).getDay()]})`),vals:wk0.map(d=>S3[d]||0),
-      prevDays:wk1,prevVals:wk1.map(d=>S3[d]||0),title:'週對比：本週 vs 上週',mode:'week'};
-  }
-  if(TP==='yoy'){
-    const v26=DK.map(d=>S3[d]||0);
-    const v25=DK.map(d=>S25_3[d.slice(5)]||0);
-    return{days:DK,labels:DK.map(d=>d.slice(5)),vals:v26,prevDays:DK,prevVals:v25,title:'YoY：2026年3月 vs 2025年3月',mode:'yoy'};
-  }
-  return{days:DK,labels:DK.map(d=>d.slice(5)),vals:DK.map(d=>S3[d]||0),prevDays:null,prevVals:null,title:'',mode:TP};
-}
-
-function buildCmpKPI(tp){
-  const{days,vals,prevDays,prevVals,mode}=tp;
-  const totCurr=vals.reduce((s,v)=>s+v,0);
-  const totPrev=prevVals?prevVals.reduce((s,v)=>s+v,0):null;
-  const adCurr=days.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0);
-  const adPrev=prevDays?prevDays.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0):null;
-  const sessCurr=days.reduce((s,d)=>s+(GA3[d]?.s||0),0);
-  const sessPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.s||0),0):null;
-  const txCurr=days.reduce((s,d)=>s+(GA3[d]?.tx||0),0);
-  const txPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.tx||0),0):null;
-  const prevLabel=mode==='mom'?'2月':mode==='qoq'?'2025Q4':mode==='week'?'上週':mode==='yoy'?'2025年同期':mode==='day'?'前一日':'—';
-
-  if(mode==='qoq'){
-    return`<div class="cmp4">
-      <div class="cc"><div class="ccl">2026Q1累計</div><div class="ccv" style="color:var(--blue)">${fmt(totCurr)}</div><div class="ccp">${prevLabel}：${fmt(totPrev)}</div>${dh(totCurr,totPrev)}</div>
-      <div class="cc"><div class="ccl">Q1月均</div><div class="ccv" style="color:var(--grn)">${fmt(Math.round(totCurr/3))}</div><div class="ccp">Q4月均：${fmt(Math.round(totPrev/3))}</div>${dh(totCurr/3,totPrev/3)}</div>
-      <div class="cc"><div class="ccl">Q4最高(雙11)</div><div class="ccv" style="color:var(--amb)">$1,977K</div><div class="ccp">11/11 當天紀錄</div></div>
-      <div class="cc"><div class="ccl">QoQ成長率</div><div class="ccv" style="color:${totCurr>=totPrev?'var(--cyan)':'var(--red)'}">${((totCurr/totPrev-1)*100).toFixed(1)}%</div><div class="ccp">${totCurr>=totPrev?'▲ 成長':'▼ 衰退'}</div></div>
-    </div>
-    <div class="ib warn" style="margin-bottom:12px"><span>⚠️</span><div>Q4含雙11、雙12旺季；Q1含農曆新年。均為旺季，直接比較需考量節慶因素。</div></div>`;
-  }
-  return`<div class="cmp4">
-    <div class="cc"><div class="ccl">期間淨銷售</div><div class="ccv" style="color:var(--blue)">${fmt(totCurr)}</div><div class="ccp">${prevLabel}：${totPrev!=null?fmt(totPrev):'—'}</div>${dh(totCurr,totPrev)}</div>
-    <div class="cc"><div class="ccl">廣告花費</div><div class="ccv" style="color:var(--amb)">${fmt(adCurr)}</div><div class="ccp">${prevLabel}：${adPrev!=null?fmt(adPrev):'—'}</div>${dh(adCurr,adPrev)}</div>
-    <div class="cc"><div class="ccl">Sessions</div><div class="ccv" style="color:var(--pur)">${sessCurr.toLocaleString()}</div><div class="ccp">${prevLabel}：${sessPrev!=null?sessPrev.toLocaleString():'—'}</div>${dh(sessCurr,sessPrev)}</div>
-    <div class="cc"><div class="ccl">購買筆數</div><div class="ccv" style="color:var(--grn)">${txCurr}筆</div><div class="ccp">${prevLabel}：${txPrev!=null?txPrev+'筆':'—'}</div>${dh(txCurr,txPrev)}</div>
-  </div>
-  ${TP==='mom'?'<div class="ib warn" style="margin-bottom:12px"><span>⚠️</span><div><strong>2月含農曆新年旺季</strong>，2/12–2/21日銷售達NT$30-56萬。以旺季後日均為正常基準。</div></div>':''}`;
-}
-
-function buildCmpChart(id,tp,chartType){
-  const{labels,vals,prevVals,mode}=tp;
-  const isLine=chartType==='line';
-  const ds=[{label:mode==='mom'?'3月':mode==='week'?'本週':mode==='yoy'?'2026年':'本期',data:vals,backgroundColor:'rgba(75,142,255,.65)',borderColor:'#4b8eff',borderWidth:isLine?2:0,fill:false,tension:.3,pointRadius:isLine?2:0,borderRadius:isLine?0:3}];
-  if(prevVals) ds.push({label:mode==='mom'?'2月':mode==='week'?'上週':mode==='yoy'?'2025年':'前期',data:prevVals,backgroundColor:'rgba(100,130,165,.38)',borderColor:'#6b7a8a',borderWidth:isLine?2:0,fill:false,tension:.3,pointRadius:isLine?2:0,borderRadius:isLine?0:3});
-  return mkChart(id,{type:isLine?'line':'bar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:!!prevVals,position:'top',labels:{color:'#3d5070',font:{size:10},boxWidth:10}},tooltip:AX.tt},scales:{x:{ticks:{...AX.t,maxRotation:mode==='30d'||mode==='mom'?90:45},grid:{display:false},border:{color:'transparent'}},y:{ticks:{callback:v=>fmtK(v),...AX.t},grid:{color:AX.g},border:{color:'transparent'}}}}});
-}
-
-// ═══ PAGE NAV ═══
-function goPage(id,btn){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
-  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
-  document.getElementById('p-'+id).classList.add('on');
-  btn.classList.add('on');
-  curPage=id;
-  if(DATA_READY) drawPage(id);
-}
-function redrawAll(){ updateTPLabel(); if(DATA_READY) drawPage(curPage); }
 
 async function doRefresh(){
   const btn=document.getElementById('rfBtn');
