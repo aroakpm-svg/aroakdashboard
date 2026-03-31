@@ -757,10 +757,19 @@ async function wFetch(connector, fields, extra={}) {
   if(extra.accounts) p.append('accounts', extra.accounts);
   if(extra.date_from) p.set('date_from', extra.date_from);
   if(extra.date_to)   p.set('date_to',   extra.date_to);
-  if(extra.filters)   p.set('filters',   JSON.stringify(extra.filters));
-  if(extra.options)   p.set('options',   typeof extra.options==='string'?extra.options:JSON.stringify(extra.options));
+  // filters: 如果是陣列就 JSON.stringify，如果已是字串直接用
+  if(extra.filters != null){
+    p.set('filters', Array.isArray(extra.filters) ? JSON.stringify(extra.filters) : String(extra.filters));
+  }
+  // options: 如果是物件就 JSON.stringify，如果已是字串直接用
+  if(extra.options != null){
+    p.set('options', typeof extra.options==='object' ? JSON.stringify(extra.options) : String(extra.options));
+  }
   const res = await fetch(`${WINDSOR}${connector}?${p}`);
-  if(!res.ok) throw new Error(`Windsor ${res.status}`);
+  if(!res.ok) {
+    const txt = await res.text().catch(()=>'');
+    throw new Error(`Windsor ${res.status}: ${txt.slice(0,100)}`);
+  }
   const j = await res.json();
   return j.data || j || [];
 }
@@ -2224,101 +2233,77 @@ function adCreativeTab(id, btn) {
 
 async function loadCreativeData() {
   if (CREATIVE_LOADED) return;
-  const dr_obj = DR_CACHE || { from: '2026-03-01', to: '2026-03-30' };
+  const from = DR_CACHE?.from || '2026-03-01';
+  const to   = new Date().toISOString().slice(0,10);
+  const errMeta   = document.getElementById('tMetaCreativeBody');
+  const errGoogle = document.getElementById('tGoogleCreativeBody');
+  if(errMeta)   errMeta.innerHTML   = '<tr><td colspan="15" style="padding:16px;color:var(--t3)">資料載入中...</td></tr>';
+  if(errGoogle) errGoogle.innerHTML = '<tr><td colspan="10" style="padding:16px;color:var(--t3)">資料載入中...</td></tr>';
+
   try {
     const [metaRaw, gaRaw] = await Promise.all([
       wFetch('facebook', [
-        'ad_name','ad_id','campaign_name','adset_name',
+        'ad_name','ad_id','campaign_name',
         'spend','impressions','reach','cpm',
         'unique_clicks','unique_ctr','cost_per_unique_click',
-        'actions_omni_purchase','action_values_omni_purchase','cost_per_action_type_omni_purchase',
-        'actions_omni_add_to_cart','action_values_omni_add_to_cart','cost_per_action_type_omni_add_to_cart'
+        'actions_omni_purchase','action_values_omni_purchase',
+        'actions_omni_add_to_cart','action_values_omni_add_to_cart'
       ], {
-        accounts: ACC.fb,
-        date_from: dr_obj.from, date_to: dr_obj.to,
-        options: '{"attribution_window":"7d_click"}',
-        filters: '[["spend","gt",500]]'
+        accounts: ACC.fb, date_from: from, date_to: to,
+        options: {attribution_window: '7d_click'},
+        filters: [['spend','gt',500]]
       }),
       wFetch('google_ads', [
-        'ad_name','ad_id','campaign_name','ad_group_name',
+        'ad_name','ad_id','campaign_name',
         'cost','impressions','clicks','ctr','average_cpm',
         'conversions','conversions_value','cost_per_conversion'
       ], {
-        accounts: ACC.gads,
-        date_from: dr_obj.from, date_to: dr_obj.to,
-        filters: '[["cost","gt",300]]'
+        accounts: ACC.gads, date_from: from, date_to: to,
+        filters: [['cost','gt',300]]
       })
     ]);
 
-    // Aggregate Meta by ad_id (same ad可能在多個 adset)
     const metaByAd = {};
     metaRaw.forEach(r => {
       const k = r.ad_id || r.ad_name || '?';
-      if (!metaByAd[k]) metaByAd[k] = {
-        name: r.ad_name || '(未命名)',
-        camp: r.campaign_name || '',
-        adset: r.adset_name || '',
-        sp: 0, imp: 0, reach: 0, ucl: 0,
-        pur: 0, purV: 0, atc: 0, atcV: 0
-      };
+      if (!metaByAd[k]) metaByAd[k] = {name:r.ad_name||'?', camp:r.campaign_name||'', sp:0,imp:0,reach:0,ucl:0,pur:0,purV:0,atc:0,atcV:0};
       const m = metaByAd[k];
-      m.sp   += +r.spend || 0;
-      m.imp  += +r.impressions || 0;
-      m.reach+= +r.reach || 0;
-      m.ucl  += +r.unique_clicks || 0;
-      m.pur  += +r.actions_omni_purchase || 0;
-      m.purV += +r.action_values_omni_purchase || 0;
-      m.atc  += +r.actions_omni_add_to_cart || 0;
-      m.atcV += +r.action_values_omni_add_to_cart || 0;
+      m.sp+=+r.spend||0; m.imp+=+r.impressions||0; m.reach+=+r.reach||0; m.ucl+=+r.unique_clicks||0;
+      m.pur+=+r.actions_omni_purchase||0; m.purV+=+r.action_values_omni_purchase||0;
+      m.atc+=+r.actions_omni_add_to_cart||0; m.atcV+=+r.action_values_omni_add_to_cart||0;
     });
-
     META_CREATIVE = Object.values(metaByAd).map(m => ({
       ...m,
-      cpm:    m.imp  ? m.sp / m.imp * 1000 : 0,
-      uctr:   m.reach? m.ucl / m.reach : 0,
-      ucpc:   m.ucl  ? m.sp / m.ucl : 0,
-      purCpa: m.pur  ? m.sp / m.pur : null,
-      purCvr: m.ucl  ? m.pur / m.ucl : 0,
-      atcCpa: m.atc  ? m.sp / m.atc : null,
-      atcCvr: m.ucl  ? m.atc / m.ucl : 0,
-      roas:   m.sp   ? m.purV / m.sp : 0
-    })).sort((a, b) => b.sp - a.sp);
+      cpm:m.imp?m.sp/m.imp*1000:0, uctr:m.reach?m.ucl/m.reach:0, ucpc:m.ucl?m.sp/m.ucl:0,
+      purCpa:m.pur?m.sp/m.pur:null, purCvr:m.ucl?m.pur/m.ucl:0,
+      atcCpa:m.atc?m.sp/m.atc:null, atcCvr:m.ucl?m.atc/m.ucl:0,
+      roas:m.sp?m.purV/m.sp:0
+    })).sort((a,b)=>b.sp-a.sp);
 
-    // Google: aggregate by ad_id+campaign
     const gaByAd = {};
     gaRaw.forEach(r => {
-      const k = (r.ad_id || 'pmax') + '||' + (r.campaign_name || '');
-      if (!gaByAd[k]) gaByAd[k] = {
-        name: r.ad_name || '(PMax 自動)',
-        camp: r.campaign_name || '',
-        sp: 0, imp: 0, cl: 0,
-        conv: 0, convV: 0
-      };
+      const k = (r.ad_id||'pmax')+'||'+(r.campaign_name||'');
+      if (!gaByAd[k]) gaByAd[k] = {name:r.ad_name||'(PMax 自動)', camp:r.campaign_name||'', sp:0,imp:0,cl:0,conv:0,convV:0};
       const g = gaByAd[k];
-      g.sp   += +r.cost || 0;
-      g.imp  += +r.impressions || 0;
-      g.cl   += +r.clicks || 0;
-      g.conv += +r.conversions || 0;
-      g.convV+= +r.conversions_value || 0;
+      g.sp+=+r.cost||0; g.imp+=+r.impressions||0; g.cl+=+r.clicks||0;
+      g.conv+=+r.conversions||0; g.convV+=+r.conversions_value||0;
     });
-
     GOOGLE_CREATIVE = Object.values(gaByAd).map(g => ({
       ...g,
-      cpm:    g.imp ? g.sp / g.imp * 1000 : 0,
-      ctr:    g.cl  ? g.cl / g.imp : 0,
-      cpa:    g.conv? g.sp / g.conv : null,
-      cvr:    g.cl  ? g.conv / g.cl : 0,
-      roas:   g.sp  ? g.convV / g.sp : 0
-    })).sort((a, b) => b.sp - a.sp);
+      cpm:g.imp?g.sp/g.imp*1000:0, ctr:g.cl?g.cl/g.imp:0,
+      cpa:g.conv?g.sp/g.conv:null, cvr:g.cl?g.conv/g.cl:0,
+      roas:g.sp?g.convV/g.sp:0
+    })).sort((a,b)=>b.sp-a.sp);
 
     CREATIVE_LOADED = true;
     renderMetaCreative();
     renderGoogleCreative();
+
   } catch(e) {
-    document.getElementById('tMetaCreativeBody').innerHTML =
-      `<tr><td colspan="15" style="color:var(--red);padding:16px">⚠️ 載入失敗：${e.message}</td></tr>`;
-    document.getElementById('tGoogleCreativeBody').innerHTML =
-      `<tr><td colspan="10" style="color:var(--red);padding:16px">⚠️ 載入失敗：${e.message}</td></tr>`;
+    console.error('Creative load error:', e);
+    const msg = e.message || '未知錯誤';
+    if(errMeta)   errMeta.innerHTML   = `<tr><td colspan="15" style="color:var(--red);padding:16px">⚠️ ${msg}</td></tr>`;
+    if(errGoogle) errGoogle.innerHTML = `<tr><td colspan="10" style="color:var(--red);padding:16px">⚠️ ${msg}</td></tr>`;
   }
 }
 
