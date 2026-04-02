@@ -834,7 +834,10 @@ async function wFetch(connector, fields, extra={}) {
   const p = new URLSearchParams();
   p.set('api_key', TOKEN);
   (Array.isArray(fields)?fields:fields.split(',')).forEach(f=>{const t=f.trim();if(t)p.append('fields',t);});
-  if(extra.accounts) p.append('accounts', extra.accounts);
+  if(extra.accounts){
+    const accs = Array.isArray(extra.accounts) ? extra.accounts : [extra.accounts];
+    accs.forEach(a => { if(a) p.append('accounts', a); });
+  }
   if(extra.date_from) p.set('date_from', extra.date_from);
   if(extra.date_to)   p.set('date_to',   extra.date_to);
   // filters: 如果是陣列就 JSON.stringify，如果已是字串直接用
@@ -848,7 +851,8 @@ async function wFetch(connector, fields, extra={}) {
   const res = await fetch(`${WINDSOR}${connector}?${p}`);
   if(!res.ok) {
     const txt = await res.text().catch(()=>'');
-    throw new Error(`Windsor ${res.status}: ${txt.slice(0,100)}`);
+    const url = `${WINDSOR}${connector}`;
+    throw new Error(`Windsor ${res.status} [${url}]: ${txt.slice(0,120)}`);
   }
   const j = await res.json();
   return j.data || j || [];
