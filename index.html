@@ -2,6 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💪</text></svg>">
 <title>AROAK 行銷主管報表 v2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -767,6 +768,14 @@ let FB_CAMP=[], GA_CAMP=[];
 let STORE_DATA=[], GA4_SRC=[], LINE_ITEMS_RAW=[];
 let GA3_FEB={}, GA3_Q4={}, GA3_Y25={};
 let DATA_READY = false;
+
+// ═══ 靜態備援資料（3月完整，API 缺資料時自動補上）═══
+const S3_MAR = {'2026-03-01':175588,'2026-03-02':153797,'2026-03-03':98566,'2026-03-04':88363,'2026-03-05':77490,'2026-03-06':95885,'2026-03-07':185311,'2026-03-08':141066,'2026-03-09':80976,'2026-03-10':55071,'2026-03-11':111781,'2026-03-12':54678,'2026-03-13':23571,'2026-03-14':155003,'2026-03-15':137992,'2026-03-16':46568,'2026-03-17':94955,'2026-03-18':76786,'2026-03-19':129878,'2026-03-20':131495,'2026-03-21':143690,'2026-03-22':159007,'2026-03-23':87876,'2026-03-24':118345,'2026-03-25':100040,'2026-03-26':87609,'2026-03-27':93237,'2026-03-28':174008,'2026-03-29':234091,'2026-03-30':124136,'2026-03-31':99670};
+const GA3_MAR = {'2026-03-01':{s:3477,atc:308,tx:28,rev:54850},'2026-03-02':{s:3116,atc:258,tx:33,rev:97483},'2026-03-03':{s:2930,atc:205,tx:26,rev:63892},'2026-03-04':{s:2936,atc:273,tx:26,rev:62841},'2026-03-05':{s:3172,atc:277,tx:23,rev:55839},'2026-03-06':{s:2996,atc:240,tx:21,rev:52175},'2026-03-07':{s:2898,atc:235,tx:29,rev:91298},'2026-03-08':{s:3183,atc:252,tx:30,rev:68148},'2026-03-09':{s:2789,atc:194,tx:22,rev:42526},'2026-03-10':{s:2417,atc:152,tx:18,rev:37675},'2026-03-11':{s:2197,atc:222,tx:25,rev:53954},'2026-03-12':{s:2404,atc:166,tx:17,rev:27036},'2026-03-13':{s:2623,atc:164,tx:18,rev:49989},'2026-03-14':{s:2530,atc:172,tx:17,rev:50636},'2026-03-15':{s:2951,atc:273,tx:18,rev:36893},'2026-03-16':{s:2990,atc:276,tx:24,rev:43774},'2026-03-17':{s:3254,atc:266,tx:23,rev:56289},'2026-03-18':{s:2977,atc:236,tx:23,rev:57511},'2026-03-19':{s:3081,atc:257,tx:31,rev:75991},'2026-03-20':{s:2873,atc:245,tx:28,rev:66287},'2026-03-21':{s:2767,atc:229,tx:20,rev:58541},'2026-03-22':{s:2998,atc:363,tx:27,rev:72876},'2026-03-23':{s:2971,atc:342,tx:31,rev:72390},'2026-03-24':{s:2910,atc:260,tx:29,rev:74610},'2026-03-25':{s:3036,atc:251,tx:20,rev:47876},'2026-03-26':{s:2758,atc:267,tx:23,rev:48880},'2026-03-27':{s:4402,atc:214,tx:18,rev:45595},'2026-03-28':{s:4210,atc:377,tx:37,rev:79964},'2026-03-29':{s:4086,atc:357,tx:37,rev:81764},'2026-03-30':{s:4274,atc:384,tx:32,rev:83844},'2026-03-31':{s:4350,atc:502,tx:19,rev:55783}};
+const FB3_MAR = {'2026-03-01':{sp:13949,roas:1.406},'2026-03-02':{sp:13378,roas:3.12},'2026-03-03':{sp:13350,roas:2.398},'2026-03-04':{sp:14590,roas:1.682},'2026-03-05':{sp:13917,roas:2.968},'2026-03-06':{sp:14607,roas:2.558},'2026-03-07':{sp:14193,roas:3.236},'2026-03-08':{sp:15405,roas:2.798},'2026-03-09':{sp:13743,roas:1.082},'2026-03-10':{sp:11165,roas:1.697},'2026-03-11':{sp:8532,roas:2.752},'2026-03-12':{sp:8961,roas:1.544},'2026-03-13':{sp:10963,roas:2.529},'2026-03-14':{sp:10609,roas:2.153},'2026-03-15':{sp:12031,roas:1.773},'2026-03-16':{sp:11515,roas:1.455},'2026-03-17':{sp:11662,roas:2.755},'2026-03-18':{sp:10552,roas:2.765},'2026-03-19':{sp:12305,roas:2.966},'2026-03-20':{sp:12133,roas:2.997},'2026-03-21':{sp:12807,roas:2.383},'2026-03-22':{sp:14834,roas:2.873},'2026-03-23':{sp:13989,roas:2.003},'2026-03-24':{sp:13979,roas:2.217},'2026-03-25':{sp:13902,roas:1.933},'2026-03-26':{sp:12734,roas:1.21},'2026-03-27':{sp:15592,roas:0.938},'2026-03-28':{sp:12000,roas:2.807},'2026-03-29':{sp:15734,roas:2.881},'2026-03-30':{sp:15387,roas:1.909},'2026-03-31':{sp:14957,roas:1.911}};
+const GAADS_MAR = {'2026-03-01':{sp:8011,rev:40749,roas:5.087},'2026-03-02':{sp:6933,rev:49451,roas:7.133},'2026-03-03':{sp:5958,rev:38937,roas:6.535},'2026-03-04':{sp:5750,rev:38545,roas:6.703},'2026-03-05':{sp:5504,rev:40337,roas:7.329},'2026-03-06':{sp:6143,rev:31947,roas:5.201},'2026-03-07':{sp:6345,rev:24113,roas:3.8},'2026-03-08':{sp:7853,rev:40861,roas:5.203},'2026-03-09':{sp:7219,rev:15541,roas:2.153},'2026-03-10':{sp:6325,rev:9720,roas:1.537},'2026-03-11':{sp:6341,rev:27271,roas:4.301},'2026-03-12':{sp:6158,rev:11399,roas:1.851},'2026-03-13':{sp:6605,rev:13347,roas:2.021},'2026-03-14':{sp:5864,rev:15521,roas:2.647},'2026-03-15':{sp:6814,rev:18596,roas:2.729},'2026-03-16':{sp:6413,rev:20514,roas:3.199},'2026-03-17':{sp:6720,rev:28960,roas:4.31},'2026-03-18':{sp:6478,rev:22458,roas:3.467},'2026-03-19':{sp:5481,rev:31265,roas:5.704},'2026-03-20':{sp:5983,rev:19642,roas:3.283},'2026-03-21':{sp:6501,rev:28067,roas:4.317},'2026-03-22':{sp:6573,rev:35439,roas:5.392},'2026-03-23':{sp:6038,rev:27372,roas:4.533},'2026-03-24':{sp:5848,rev:21420,roas:3.663},'2026-03-25':{sp:6338,rev:20503,roas:3.235},'2026-03-26':{sp:6147,rev:10919,roas:1.776},'2026-03-27':{sp:5903,rev:43876,roas:7.433},'2026-03-28':{sp:6488,rev:33624,roas:5.182},'2026-03-29':{sp:6459,rev:27481,roas:4.255},'2026-03-30':{sp:5324,rev:35987,roas:6.759},'2026-03-31':{sp:5488,rev:9587,roas:1.747}};
+
+
 let LOADING = false;
 
 // ═══ SETUP / AUTH ═══
@@ -879,9 +888,9 @@ async function loadAllData() {
   const todayStr = new Date().toISOString().slice(0,10);
   const _now = new Date();
   const curYM = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0');
-  // 近30天範圍（跨月也支援）
-  const _30d = new Date(_now); _30d.setDate(_30d.getDate()-29);
-  const mar_from = _30d.toISOString().slice(0,10);
+  // 拉資料範圍：從 63 天前（確保跨月時 3 月資料完整）
+  const _63d = new Date(_now); _63d.setDate(_63d.getDate()-62);
+  const mar_from = _63d.toISOString().slice(0,10);
   const mar_to   = todayStr;
   const prevMonth = new Date(_now.getFullYear(), _now.getMonth()-1, 1);
   const feb_from = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0') + '-01';
@@ -1041,10 +1050,19 @@ async function loadAllData() {
       .map(r=>({src:`${r.source}/${r.medium}`,s:+r.sessions||0,tx:+r.transactions||0,rev:+r.purchase_revenue||0}))
       .sort((a,b)=>b.tx-a.tx);
 
+    // ── 合併靜態備援（S3 缺的日期自動補上）──
+    Object.entries(S3_MAR).forEach(([d,v])=>{ if(!S3[d]) S3[d]=v; });
+    Object.entries(GA3_MAR).forEach(([d,v])=>{ if(!GA3[d]) GA3[d]=v; });
+    Object.entries(FB3_MAR).forEach(([d,v])=>{ if(!FB3[d]) FB3[d]=v; });
+    Object.entries(GAADS_MAR).forEach(([d,v])=>{ if(!GAADS[d]) GAADS[d]=v; });
+
     DATA_READY = true;
     LOADING = false;
 
-    const DK = Object.keys(S3).sort().filter(d=>d>=mar_from && d<=todayStr);
+    // DK：近30天（顯示用），但 S3 包含更長範圍作為備援
+  const _30dFrom = new Date(_now); _30dFrom.setDate(_30dFrom.getDate()-29);
+  const _30dFromStr = _30dFrom.toISOString().slice(0,10);
+  const DK = Object.keys(S3).sort().filter(d=>d>=_30dFromStr && d<=todayStr);
     const last = DK[DK.length-1]||'';
     document.getElementById('tb-period').textContent =
       `${DK[0]?.slice(5)||''}–${last.slice(5)||''} · ${DK.length}天`;
