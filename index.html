@@ -873,10 +873,18 @@ async function loadAllData() {
   document.getElementById('tb-period').textContent = '資料載入中...';
 
   const todayStr = new Date().toISOString().slice(0,10);
-  const mar_from = '2026-03-01', mar_to = todayStr;
-  const feb_from = '2026-02-01', feb_to = '2026-02-28';
+  const _now = new Date();
+  const curYM = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0');
+  const mar_from = curYM + '-01';
+  const mar_to   = todayStr;
+  const prevMonth = new Date(_now.getFullYear(), _now.getMonth()-1, 1);
+  const feb_from = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0') + '-01';
+  const feb_to   = new Date(_now.getFullYear(), _now.getMonth(), 0).toISOString().slice(0,10);
   const q4_from  = '2025-10-01', q4_to  = '2025-12-31';
-  const y25_from = '2025-03-01', y25_to = '2025-03-31';
+  // YoY：去年同月
+  const y25_from = (_now.getFullYear()-1) + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-01';
+  const _y25Last = new Date(_now.getFullYear()-1, _now.getMonth()+1, 0);
+  const y25_to = _y25Last.toISOString().slice(0,10);
 
   // 輔助：安全取值（失敗回傳空陣列）
   const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('wFetch failed:', e.message); return []; } };
@@ -1028,7 +1036,7 @@ async function loadAllData() {
     DATA_READY = true;
     LOADING = false;
 
-    const DK = Object.keys(S3).sort().filter(d=>d.startsWith('2026-03'));
+    const DK = Object.keys(S3).sort().filter(d=>d.startsWith(curYM));
     const last = DK[DK.length-1]||'';
     document.getElementById('tb-period').textContent =
       `${DK[0]?.slice(5)||''}–${last.slice(5)||''} · ${DK.length}天`;
@@ -1069,7 +1077,11 @@ async function doRefresh(){
 }
 
 // ═══ TIME PERIOD ═══
-const DK_fn = () => Object.keys(S3).sort().filter(d=>d.startsWith('2026-03'));
+const DK_fn = () => {
+  const now = new Date();
+  const ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  return Object.keys(S3).sort().filter(d=>d.startsWith(ym));
+};
 
 function setTP(mode,btn){
   TP=mode;
@@ -1401,7 +1413,9 @@ function drawGA4(){
 
 function drawAds(){
   // 更新 DR_CACHE 供素材分析用
-  const DK_all=DK_fn(); DR_CACHE={from:DK_all[0]||'2026-03-01',to:DK_all[DK_all.length-1]||'2026-03-31'};
+  const DK_all=DK_fn();
+  const _now2=new Date(); const _ym2=_now2.getFullYear()+'-'+String(_now2.getMonth()+1).padStart(2,'0');
+  DR_CACHE={from:DK_all[0]||(_ym2+'-01'),to:DK_all[DK_all.length-1]||new Date().toISOString().slice(0,10)};
   // DR_CACHE 已在上面設好，強制重拉素材資料
   const tp=getTPDays();
   const{days,mode}=tp;
@@ -3072,7 +3086,8 @@ async function loadCreativeData(forceReload=false) {
   if (CREATIVE_LOADED && !forceReload) return;
   CREATIVE_LOADED = false;
   META_CREATIVE = []; GOOGLE_CREATIVE = [];
-  const from = DR_CACHE?.from || '2026-03-01';
+  const _cn = new Date(); const _cym = _cn.getFullYear()+'-'+String(_cn.getMonth()+1).padStart(2,'0');
+  const from = DR_CACHE?.from || (_cym+'-01');
   const to   = DR_CACHE?.to   || new Date().toISOString().slice(0,10);
   const errMeta   = document.getElementById('tMetaCreativeBody');
   const errGoogle = document.getElementById('tGoogleCreativeBody');
