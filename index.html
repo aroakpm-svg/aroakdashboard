@@ -888,9 +888,9 @@ async function loadAllData() {
   const todayStr = new Date().toISOString().slice(0,10);
   const _now = new Date();
   const curYM = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0');
-  // 拉資料範圍：從 63 天前（確保跨月時 3 月資料完整）
-  const _63d = new Date(_now); _63d.setDate(_63d.getDate()-62);
-  const mar_from = _63d.toISOString().slice(0,10);
+  // 拉資料範圍：近30天（靜態備援確保3月完整）
+  const _30dApi = new Date(_now); _30dApi.setDate(_30dApi.getDate()-29);
+  const mar_from = _30dApi.toISOString().slice(0,10);
   const mar_to   = todayStr;
   const prevMonth = new Date(_now.getFullYear(), _now.getMonth()-1, 1);
   const feb_from = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0') + '-01';
@@ -1050,11 +1050,11 @@ async function loadAllData() {
       .map(r=>({src:`${r.source}/${r.medium}`,s:+r.sessions||0,tx:+r.transactions||0,rev:+r.purchase_revenue||0}))
       .sort((a,b)=>b.tx-a.tx);
 
-    // ── 合併靜態備援（S3 缺的日期自動補上）──
-    Object.entries(S3_MAR).forEach(([d,v])=>{ if(!S3[d]) S3[d]=v; });
-    Object.entries(GA3_MAR).forEach(([d,v])=>{ if(!GA3[d]) GA3[d]=v; });
-    Object.entries(FB3_MAR).forEach(([d,v])=>{ if(!FB3[d]) FB3[d]=v; });
-    Object.entries(GAADS_MAR).forEach(([d,v])=>{ if(!GAADS[d]) GAADS[d]=v; });
+    // ── 強制補入靜態3月備援（API可能因跨月而不包含3月）──
+    Object.entries(S3_MAR).forEach(([d,v])=>{ S3[d]=S3[d]||v; });
+    Object.entries(GA3_MAR).forEach(([d,v])=>{ GA3[d]=GA3[d]||v; });
+    Object.entries(FB3_MAR).forEach(([d,v])=>{ FB3[d]=FB3[d]||v; });
+    Object.entries(GAADS_MAR).forEach(([d,v])=>{ GAADS[d]=GAADS[d]||v; });
 
     DATA_READY = true;
     LOADING = false;
@@ -1105,8 +1105,10 @@ async function doRefresh(){
 // ═══ TIME PERIOD ═══
 const DK_fn = () => {
   const now = new Date();
-  const ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  return Object.keys(S3).sort().filter(d=>d.startsWith(ym));
+  const d30 = new Date(now); d30.setDate(d30.getDate()-29);
+  const from = d30.toISOString().slice(0,10);
+  const to   = now.toISOString().slice(0,10);
+  return Object.keys(S3).sort().filter(d=>d>=from && d<=to);
 };
 
 function setTP(mode,btn){
