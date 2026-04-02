@@ -901,7 +901,13 @@ async function loadAllData() {
       safe(() => wFetch('shopify',['date','order_retail_location_name','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['order_retail_location_name','notnull',null]]})),
       safe(() => wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to})),
       safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:feb_from,date_to:feb_to})),
-      safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:q4_from,date_to:q4_to})),
+      safe(() => (async () => {
+        const [a,b] = await Promise.all([
+          safe(()=>wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:q4_from,date_to:'2025-10-31'})),
+          safe(()=>wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:'2025-11-01',date_to:q4_to}))
+        ]);
+        return [...(a||[]),...(b||[])];
+      })()),
       safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:y25_from,date_to:y25_to})),
     ]);
 
@@ -1344,9 +1350,11 @@ function drawOverview(){
   drawKpiRing('cKpiAd',fbPctOv,'rgba(240,160,32,.18)','#f0a020');
 
   const _kv=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  _kv('kv-online',fmtK(totOnlineOv)); _kv('kp-online',oAchv+'%');  document.getElementById('kp-online').style.color=oClr;
+  _kv('kv-online',fmtK(totOnlineOv)); _kv('kp-online',oAchv+'%');
+  const _kpO=document.getElementById('kp-online'); if(_kpO) _kpO.style.color=oClr;
   _kv('ks-online','日均 '+fmt(Math.round(oAvg)));
-  _kv('kv-store', fmtK(totStoreOv));  _kv('kp-store', sAchv+'%');  document.getElementById('kp-store').style.color=sClr;
+  _kv('kv-store', fmtK(totStoreOv));  _kv('kp-store', sAchv+'%');
+  const _kpS=document.getElementById('kp-store'); if(_kpS) _kpS.style.color=sClr;
   _kv('ks-store', '日均 '+fmt(Math.round(sAvg))+'/店');
   _kv('kv-ga4',   fmtK(totRev));      _kv('kp-ga4',   cvr+'%');
   _kv('ks-ga4',   totTx+' 筆訂單');
