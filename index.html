@@ -765,6 +765,7 @@ const CHARTS = {};
 let S3={}, S2={}, S25_3={}, S25Q4={}, GA3={}, FB3={}, GAADS={};
 let FB_CAMP=[], GA_CAMP=[];
 let STORE_DATA=[], GA4_SRC=[], LINE_ITEMS_RAW=[];
+let GA3_FEB={}, GA3_Q4={}, GA3_Y25={};
 let DATA_READY = false;
 let LOADING = false;
 
@@ -890,7 +891,8 @@ async function loadAllData() {
     ]);
 
     // ── 第二批：比較用數據 ──
-    const [shFeb, shQ4, sh25, fbCamp, gadsCamp, storeMar, ga4Src] = await Promise.all([
+    const ga4Fields = ['date','sessions','add_to_carts','transactions','purchase_revenue'];
+    const [shFeb, shQ4, sh25, fbCamp, gadsCamp, storeMar, ga4Src, ga4Feb, ga4Q4, ga425] = await Promise.all([
       safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:feb_from,date_to:feb_to})),
       safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:q4_from,date_to:q4_to})),
       safe(() => wFetch('shopify',['date','order_net_sales'],{accounts:ACC.shopify,date_from:y25_from,date_to:y25_to})),
@@ -898,6 +900,9 @@ async function loadAllData() {
       safe(() => wFetch('google_ads',['campaign_name','cost','conversions_value'],{accounts:ACC.gads,date_from:mar_from,date_to:mar_to})),
       safe(() => wFetch('shopify',['date','order_retail_location_name','order_net_sales'],{accounts:ACC.shopify,date_from:mar_from,date_to:mar_to,filters:[['order_retail_location_name','notnull',null]]})),
       safe(() => wFetch('googleanalytics4',['source','medium','sessions','transactions','purchase_revenue'],{accounts:ACC.ga4,date_from:mar_from,date_to:mar_to})),
+      safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:feb_from,date_to:feb_to})),
+      safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:q4_from,date_to:q4_to})),
+      safe(() => wFetch('googleanalytics4',ga4Fields,{accounts:ACC.ga4,date_from:y25_from,date_to:y25_to})),
     ]);
 
     // ── 處理 Shopify 3月 ──
@@ -989,6 +994,24 @@ async function loadAllData() {
       stM[r.date][s]=(stM[r.date][s]||0)+(+r.order_net_sales||0);
     });
     STORE_DATA = stM;
+
+    // ── 處理 GA4 歷史（2月、Q4、YoY）──
+    const buildGA4Map = (rows) => {
+      const m = {};
+      (rows||[]).forEach(r => {
+        if(!m[r.date]) m[r.date]={s:0,atc:0,tx:0,rev:0};
+        m[r.date].s  +=+r.sessions||0;
+        m[r.date].atc+=+r.add_to_carts||0;
+        m[r.date].tx +=+r.transactions||0;
+        m[r.date].rev+=+r.purchase_revenue||0;
+      });
+      return m;
+    };
+    GA3_FEB  = buildGA4Map(ga4Feb);
+    GA3_Q4   = buildGA4Map(ga4Q4);
+    GA3_Y25  = Object.fromEntries(
+      Object.entries(buildGA4Map(ga425)).map(([d,v])=>[d.slice(5),v])
+    );
 
     // ── 處理 GA4 來源 ──
     GA4_SRC = ga4Src
@@ -1119,10 +1142,21 @@ function buildCmpKPI(tp){
   const totPrev=prevVals?prevVals.reduce((s,v)=>s+v,0):null;
   const adCurr=days.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0);
   const adPrev=prevDays?prevDays.reduce((s,d)=>s+(FB3[d]?.sp||0)+(GAADS[d]?.sp||0),0):null;
+  // GA4 依時段選對應資料源
+  const gaMapPrev = mode==='mom' ? GA3_FEB
+    : (mode==='qoq' ? GA3_Q4
+    : (mode==='yoy' ? GA3_Y25
+    : GA3));  // week/day/30d 用同一個 GA3
   const sessCurr=days.reduce((s,d)=>s+(GA3[d]?.s||0),0);
-  const sessPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.s||0),0):null;
+  const sessPrev=prevDays?prevDays.reduce((s,d)=>{
+    const key = mode==='yoy' ? d.slice(5) : d;
+    return s+((gaMapPrev[key]?.s)||0);
+  },0):null;
   const txCurr=days.reduce((s,d)=>s+(GA3[d]?.tx||0),0);
-  const txPrev=prevDays?prevDays.reduce((s,d)=>s+(GA3[d]?.tx||0),0):null;
+  const txPrev=prevDays?prevDays.reduce((s,d)=>{
+    const key = mode==='yoy' ? d.slice(5) : d;
+    return s+((gaMapPrev[key]?.tx)||0);
+  },0):null;
   const prevLabel=mode==='mom'?'2月':mode==='qoq'?'2025Q4':mode==='week'?'上週':mode==='yoy'?'2025年同期':mode==='day'?'前一日':'—';
   if(mode==='qoq'){
     return`<div class="cmp4">
