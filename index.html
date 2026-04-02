@@ -898,7 +898,7 @@ async function loadAllData() {
   const q4_from  = '2025-10-01', q4_to  = '2025-12-31';
   // YoY：去年同月
   // YoY：去年同期（同樣的30天區間）
-  const _y25Start = new Date(_30d); _y25Start.setFullYear(_y25Start.getFullYear()-1);
+  const _y25Start = new Date(_30dApi); _y25Start.setFullYear(_y25Start.getFullYear()-1);
   const _y25End = new Date(_now); _y25End.setFullYear(_y25End.getFullYear()-1);
   const y25_from = _y25Start.toISOString().slice(0,10);
   const y25_to   = _y25End.toISOString().slice(0,10);
